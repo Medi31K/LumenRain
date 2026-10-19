@@ -1048,3 +1048,32 @@ math-field:not(:focus):empty::before {
     animation: none;
   }
 }
+
+.popover.shortcuts {
+  width: 360px;
+  padding: 10px 14px;
+}
+.shortcuts table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.shortcuts td {
+  padding: 5px 4px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--lr-border-cut) 45%, transparent);
+  color: var(--lr-text-primary);
+}
+.shortcuts tr:last-child td {
+  border-bottom: 0;
+}
+.shortcuts td:first-child {
+  white-space: nowrap;
+  padding-right: 12px;
+}
+.shortcuts kbd {
+  font: 600 12px ui-monospace, Menlo, Consolas, monospace;
+  background: var(--lr-bg-slip);
+  border-radius: var(--lr-radius-sm);
+  padding: 2px 6px;
+  box-shadow: var(--lift-sm);
+}

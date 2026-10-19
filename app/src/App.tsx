@@ -88,7 +88,7 @@ function Tex({ latex }: { latex: string }) {
   return <span className="math" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
-type Panel = null | 'settings' | 'symbols' | 'export' | 'templates' | 'hotkeys'
+type Panel = null | 'shortcuts' | 'settings' | 'symbols' | 'export' | 'templates' | 'hotkeys'
 
 export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
@@ -402,18 +402,42 @@ export default function App() {
           <span className="brand-letters" />
           <span className="brand-drop" />
         </span>
-        <button className="btn primary" onClick={() => editorRef.current?.insertEquation('', true)} title={hk('equation')}>
-          {t.newEquation}
-        </button>
-        <button className="btn" onClick={() => insert('\\frac{#@}{#?}')} title="/">
-          {t.fraction}
-        </button>
-        <button className="btn" onClick={() => insert('\\sqrt{#@}')} title="sqrt(">
-          {t.root}
-        </button>
-        <button className="btn" onClick={() => insert('#@^{#?}')} title="^">
-          {t.power}
-        </button>
+        <div className="anchor">
+          <button className={`btn primary ${panel === 'shortcuts' ? 'on' : ''}`} onClick={() => setPanel(panel === 'shortcuts' ? null : 'shortcuts')}>
+            {t.shortcutsBtn}
+          </button>
+          {panel === 'shortcuts' && (
+            <div className="popover shortcuts">
+              <table>
+                <tbody>
+                  {[
+                    [hk('equation'), t.sc.equation],
+                    [hk('inlineEquation'), t.sc.inline],
+                    ['Enter', t.sc.calc],
+                    ['Enter ×2', t.sc.leave],
+                    ['/', t.sc.fraction],
+                    ['^  _', t.sc.power],
+                    ['sqrt(', t.sc.root],
+                    ['ddx  pdx  int  lim  sum', t.sc.calculus],
+                    ['alpha  pi  omega …', t.sc.greek],
+                    ['\\', t.sc.commands],
+                    ['Ctrl+Z / Ctrl+Y', t.sc.undo],
+                    [hk('heading1')?.replace('1', '1–6'), t.sc.headings],
+                    ['- / 1. / ---', t.sc.lists],
+                    [hk('toggleSource'), t.sc.source],
+                  ].map(([k, d]) => (
+                    <tr key={d}>
+                      <td>
+                        <kbd>{k}</kbd>
+                      </td>
+                      <td>{d}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         <div className="anchor">
           <button className={`btn ${panel === 'symbols' ? 'on' : ''}`} onClick={() => setPanel(panel === 'symbols' ? null : 'symbols')}>
             ∂ ∫ α

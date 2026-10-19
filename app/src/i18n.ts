@@ -1,6 +1,8 @@
 import type { Lang } from './engine'
 
 const en = {
+  shortcutsBtn: 'Shortcuts',
+  sc: { equation: 'Equation on its own line', inline: 'Equation in the text', calc: 'Calculate', leave: 'Leave the equation', fraction: 'Fraction', power: 'Exponent / index', root: 'Square root, ) closes it', calculus: 'Derivative, ∂, integral, limit, sum', greek: 'Greek letters', commands: 'Search all commands', undo: 'Undo / redo', headings: 'Headings', lists: 'Bullet, numbered list, line', source: 'Markdown source' },
   groups: { calculus: 'Calculus', vectors: 'Vectors & QM', algebra: 'Algebra', relations: 'Relations', greek: 'Greek' },
   typeHint: 'type',
   notes: 'Notes',
@@ -84,6 +86,8 @@ const en = {
 }
 
 const da: typeof en = {
+  shortcutsBtn: 'Genveje',
+  sc: { equation: 'Ligning på egen linje', inline: 'Ligning i teksten', calc: 'Beregn', leave: 'Forlad ligningen', fraction: 'Brøk', power: 'Potens / indeks', root: 'Kvadratrod, ) lukker', calculus: 'Afledt, ∂, integral, grænse, sum', greek: 'Græske bogstaver', commands: 'Søg i alle kommandoer', undo: 'Fortryd / gentag', headings: 'Overskrifter', lists: 'Punkt-, nummereret liste, linje', source: 'Markdown-kilde' },
   groups: { calculus: 'Analyse', vectors: 'Vektorer & KM', algebra: 'Algebra', relations: 'Relationer', greek: 'Græsk' },
   typeHint: 'skriv',
   notes: 'Noter',
