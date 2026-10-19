@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/logo-lr.png" alt="Lumenrain" width="120">
+</p>
+
+<p align="center">
   <img src="docs/splash.png" alt="Lumenrain loading screen" width="820">
 </p>
 
