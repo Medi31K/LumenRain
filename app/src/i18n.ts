@@ -79,7 +79,6 @@ const en = {
   close: 'Close',
   errParse: "Can't read this expression",
   errSolve: "Can't solve this equation",
-  shortcuts: 'Alt+M  equation  ·  Alt+Shift+M  inline  ·  Enter  calculate  ·  Enter again  leave field  ·  \\  commands',
 }
 
 const da: typeof en = {
@@ -161,7 +160,6 @@ const da: typeof en = {
   close: 'Luk',
   errParse: 'Kan ikke læse udtrykket',
   errSolve: 'Kan ikke løse ligningen',
-  shortcuts: 'Alt+M  ligning  ·  Alt+Shift+M  i teksten  ·  Enter  beregn  ·  Enter igen  forlad feltet  ·  \\  kommandoer',
 }
 
 export type Strings = typeof en

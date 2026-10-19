@@ -202,6 +202,7 @@ export default function App() {
       writeJson(noteKey(id), doc)
       removeKey(LEGACY_DOC_KEY)
       index = { tabs: [{ id, title: titleOf(doc.blocks) || strings[engineOpts.lang].untitled }], active: id }
+      writeJson(NOTES_KEY, index) // right away, so a second mount reuses this note
       setTabs(index.tabs)
       activeRef.current = id
       setActiveId(id)
@@ -533,7 +534,6 @@ export default function App() {
             <textarea className="source" value={source} onChange={(e) => setSource(e.target.value)} spellCheck={false} aria-label={t.sourceMode} autoFocus />
           )}
           <div ref={pageRef} className="page" hidden={source !== null} />
-          <p className="hint">{t.shortcuts}</p>
         </article>
       </main>
 

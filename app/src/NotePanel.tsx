@@ -98,7 +98,11 @@ export function TabBar(p: TabBarProps) {
           aria-label={t.noteMenu}
           title={t.noteMenu}
         >
-          +
+          {/* Water rising in a capillary: the surface climbs the walls (Young–Laplace meniscus). */}
+          <svg className="meniscus" viewBox="0 0 40 40" aria-hidden="true">
+            <path className="water" d="M0 60 L0 22 C0 30 8 30 20 30 C32 30 40 30 40 22 L40 60 Z" />
+          </svg>
+          <span className="plus-sign">+</span>
         </button>
         {p.menuOpen && (
           <div className="popover tab-menu" role="menu">

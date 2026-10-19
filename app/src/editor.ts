@@ -33,8 +33,14 @@ interface Atom {
   isLastSibling: boolean
 }
 
+type Model = { position: number; at(p: number): Atom }
+
+function modelOf(mf: MathfieldElement): Model | null {
+  return (mf as unknown as { _mathfield?: { model?: Model } })._mathfield?.model ?? null
+}
+
 function caretAtom(mf: MathfieldElement): Atom | null {
-  const model = (mf as unknown as { _mathfield?: { model?: { position: number; at(p: number): Atom } } })._mathfield?.model
+  const model = modelOf(mf)
   return model ? model.at(model.position) : null
 }
 
@@ -56,6 +62,40 @@ function buildUp(mf: MathfieldElement, key: string): boolean {
   }
   if (key === ')' && a.parent?.type === 'surd' && a.parentBranch === 'body') {
     mf.executeCommand('moveAfterParent')
+    return true
+  }
+  return false
+}
+
+/** Fractions, roots, exponents, brackets … anything Word treats as one "structure". */
+const STRUCTURES = ['genfrac', 'surd', 'subsup', 'leftright', 'overunder', 'array', 'box', 'enclose', 'overlap', 'extensible-symbol']
+const isStructure = (a: Atom | null | undefined) =>
+  !!a && (STRUCTURES.includes(a.type) || (a as unknown as { hasChildren?: boolean }).hasChildren === true)
+
+/**
+ * Word: Backspace/Delete next to a fraction, root … first selects the whole
+ * structure; the second press deletes it. Returns true if it selected.
+ */
+function selectStructure(mf: MathfieldElement, key: string): boolean {
+  if (!mf.selectionIsCollapsed) return false
+  const model = modelOf(mf)
+  if (!model) return false
+  const pos = model.position
+  if (key === 'Backspace') {
+    const before = model.at(pos)
+    if (pos <= 0 || before.type === 'first' || !isStructure(before)) return false
+    // Walk back to the sibling just before the structure: that offset is where it starts.
+    let start = pos - 1
+    while (start > 0 && model.at(start).parent !== before.parent) start--
+    mf.selection = { ranges: [[start, pos]], direction: 'backward' }
+    return true
+  }
+  if (key === 'Delete') {
+    const level = model.at(pos).parent
+    let end = pos + 1
+    while (end <= mf.lastOffset && model.at(end).parent !== level) end++
+    if (end > mf.lastOffset || !isStructure(model.at(end))) return false
+    mf.selection = { ranges: [[pos, end]], direction: 'forward' }
     return true
   }
   return false
@@ -121,6 +161,7 @@ export class DocEditor {
   private hooks: EditorHooks
   private opts: EngineOptions
   lastField: MathfieldElement | null = null
+  private fieldCount = 0
   /** Horizontal "goal column" kept across consecutive ↑/↓, like Word. */
   private goalX: number | null = null
 
@@ -135,6 +176,7 @@ export class DocEditor {
     root.addEventListener('keydown', this.onRootKey)
     root.addEventListener('input', this.onRootInput)
     root.addEventListener('pointerdown', this.resetGoal)
+    document.addEventListener('selectionchange', this.markSelected)
   }
 
   private resetGoal = () => {
@@ -145,6 +187,7 @@ export class DocEditor {
     this.root.removeEventListener('keydown', this.onRootKey)
     this.root.removeEventListener('input', this.onRootInput)
     this.root.removeEventListener('pointerdown', this.resetGoal)
+    document.removeEventListener('selectionchange', this.markSelected)
   }
 
   setOptions(opts: EngineOptions) {
@@ -381,6 +424,7 @@ export class DocEditor {
     const fields = Array.from(this.root.querySelectorAll('math-field')) as MathfieldElement[]
     const inputs = fields.map((mf) => inputOf(mf.value))
     const { outcomes, variables } = runDocument(inputs, this.opts)
+    this.fieldCount = fields.length
     fields.forEach((mf, i) => {
       // Only fields that have been calculated once (or came with a result) show answers.
       if (!mf.dataset.calc) return
@@ -420,6 +464,11 @@ export class DocEditor {
       return
     }
     if (plain && e.key === 'Delete' && mf.position >= inputEnd(mf)) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    if (plain && (e.key === 'Backspace' || e.key === 'Delete') && selectStructure(mf, e.key)) {
       e.preventDefault()
       e.stopPropagation()
       return
@@ -493,6 +542,17 @@ export class DocEditor {
    */
   moveVertical(from: DOMRect, dir: -1 | 1) {
     const x = (this.goalX ??= from.left)
+    // Near the edge of the scrolling sheet: scroll first so the next line is on screen.
+    const box = this.root.closest('.sheet') as HTMLElement | null
+    if (box) {
+      const br = box.getBoundingClientRect()
+      if (dir > 0 ? from.bottom + 60 > br.bottom : from.top - 60 < br.top) {
+        const before = box.scrollTop
+        box.scrollTop += dir * 140
+        const moved = box.scrollTop - before
+        from = new DOMRect(from.x, from.y - moved, from.width, from.height)
+      }
+    }
     const rootRect = this.root.getBoundingClientRect()
     const startY = dir < 0 ? from.top : from.bottom
     for (let step = 1; step <= 40; step++) {
@@ -551,6 +611,20 @@ export class DocEditor {
       e.preventDefault()
       this.insertEquation()
       return
+    }
+    if (!inField && (e.key === 'Backspace' || e.key === 'Delete') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const eq = this.adjacentEquation(e.key === 'Delete')
+      if (eq) {
+        // Word: the first press selects the whole equation, the second deletes it.
+        e.preventDefault()
+        const r = document.createRange()
+        r.selectNode(eq)
+        const sel = window.getSelection()!
+        sel.removeAllRanges()
+        sel.addRange(r)
+        this.markSelected()
+        return
+      }
     }
     if (!inField && (e.key === 'Enter' || e.key === 'Backspace') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const sel = window.getSelection()
@@ -627,8 +701,35 @@ export class DocEditor {
     }
   }
 
+  /** The equation directly before (or after) a collapsed caret in the text, skipping caret anchors. */
+  private adjacentEquation(forward: boolean): HTMLElement | null {
+    const sel = window.getSelection()
+    if (!sel || !sel.isCollapsed || !sel.focusNode || !this.root.contains(sel.focusNode)) return null
+    const { focusNode, focusOffset } = sel
+    let n: Node | null
+    if (focusNode.nodeType === Node.TEXT_NODE) {
+      const t = focusNode.textContent ?? ''
+      const rest = forward ? t.slice(focusOffset) : t.slice(0, focusOffset)
+      if (rest.replace(/\u200B/g, '') !== '') return null
+      n = forward ? focusNode.nextSibling : focusNode.previousSibling
+    } else {
+      n = focusNode.childNodes[forward ? focusOffset : focusOffset - 1] ?? null
+    }
+    while (n && n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').replace(/\u200B/g, '') === '') n = forward ? n.nextSibling : n.previousSibling
+    return n instanceof HTMLElement && n.classList.contains('eq') ? n : null
+  }
+
+  /** Highlights equations that are part of the page selection. */
+  markSelected = () => {
+    const sel = window.getSelection()
+    for (const eq of Array.from(this.root.querySelectorAll('.eq')))
+      eq.classList.toggle('selected', !!sel && !sel.isCollapsed && sel.containsNode(eq, false))
+  }
+
   private onRootInput = () => {
     this.hooks.onTyping()
+    // An equation may just have been deleted: refresh results and variables.
+    if (this.root.querySelectorAll('math-field').length !== this.fieldCount) this.recompute(false)
     // Markdown-style shortcuts at the start of a paragraph: "# ", "## ", "### ", "- ".
     const sel = window.getSelection()
     const block = sel?.focusNode ? this.blockOf(sel.focusNode) : null
