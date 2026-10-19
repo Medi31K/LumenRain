@@ -720,20 +720,6 @@ math-field:not(:focus):empty::before {
   position: relative;
   font: 600 20px/34px var(--font-ui);
 }
-.meniscus {
-  position: absolute;
-  inset: 0;
-}
-.meniscus .water {
-  fill: var(--lr-bg-accent);
-  opacity: 0.28;
-  transform: translateY(8px);
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.tab-plus:hover .water,
-.tab-plus.on .water {
-  transform: translateY(-6px);
-}
 .tabs {
   display: flex;
   gap: 3px;
