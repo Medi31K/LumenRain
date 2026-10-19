@@ -693,18 +693,18 @@ math-field:not(:focus):empty::before {
   flex: none;
   display: flex;
   align-items: flex-end;
-  gap: 4px;
+  gap: 3px; /* same as between tabs */
   position: relative;
   z-index: 3;
 }
 .tab-plus {
   position: relative;
   overflow: hidden;
-  width: 36px;
-  height: 36px;
-  margin: 0 10px 6px 0;
+  width: 46px;
+  height: 30px; /* same as a tab */
+  margin: 0;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--lr-radius-lg);
   background: var(--lr-bg-sheet);
   color: var(--lr-text-primary);
   cursor: pointer;
@@ -718,7 +718,7 @@ math-field:not(:focus):empty::before {
 }
 .tab-plus .plus-sign {
   position: relative;
-  font: 600 22px/36px var(--font-ui);
+  font: 600 20px/30px var(--font-ui);
 }
 .meniscus {
   position: absolute;
