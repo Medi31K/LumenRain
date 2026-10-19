@@ -78,3 +78,7 @@ Windows and macOS installers are also built by `.github/workflows/desktop.yml`, 
 | `docs/` | Plan and design system |
 
 Design: [Figma](https://www.figma.com/design/5wj8aGzwvICBvt7NuCsowP)
+
+## License
+
+Copyright © 2026 Mehdi. **All rights reserved.** See [LICENSE](LICENSE). This is not open source.
