@@ -48,3 +48,7 @@ Udenfor v1: grafer, enheder/konstanter (kandidater til v2).
 - A · Aurora Night: mørk, med nordlys-orbs i teal, violet og rose bag frostet glas
 - B · Liquid Daylight: lyst perlemor-glas (Liquid Glass-inspireret) med azur-accent
 - C · Rosé Rain: skumring i rosé og guld (Rosé Pine-inspireret)
+- **Valgt retning: Paper cutout ("Paper Rain")**
+  - D · Dag: cremefarvet karton med lag af blå papirbakker, papirskyer og regndråber. Accentfarven er terracotta `#E2674A`.
+  - E · Nat: mørkt blåt karton med en gul papirmåne `#F5C451` og blåsorte lag.
+  - Kendetegn: ark med bløde skygger og let rotation, tape-strimler, ligningsfelter som papirlapper og tomme felter med stiplet "klippelinje".
