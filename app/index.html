@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lumenrain</title>
+    <script>
+      // Set the theme before the first paint so there is no light flash.
+      try {
+        var t = (JSON.parse(localStorage.getItem('lumenrain.settings') || '{}').theme) || 'night'
+        if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day'
+        document.documentElement.dataset.theme = t
+      } catch (e) {
+        document.documentElement.dataset.theme = 'night'
+      }
+    </script>
+    <style>html[data-theme='night'],html[data-theme='night'] body{background:#1c2130}</style>
   </head>
   <body>
     <div id="root"></div>

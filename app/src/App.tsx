@@ -61,7 +61,7 @@ function removeKey(key: string) {
 const newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
 const defaultSettings: Settings = {
-  theme: 'system',
+  theme: 'night',
   lang: navigator.language.startsWith('da') ? 'da' : 'en',
   mode: 'auto',
   digits: 6,
