@@ -23,16 +23,24 @@ It has a paper-cutout theme in Day and Night, and exports to Obsidian Markdown.
 
 ## Develop
 
+Run these from the repo root. They forward to `app/`, so running them inside `app/` works too.
+
 ```bash
-cd app
-npm install
-npm run dev        # web preview at http://localhost:5173
-npm test           # engine + Markdown tests
-npm run tauri dev  # desktop window (needs Rust + platform WebView)
-npm run tauri build
+npm install          # installs everything in app/
+npm run dev          # web preview at http://localhost:5173
+npm test             # engine + Markdown tests
+npm run tauri dev    # desktop window
+npm run tauri build  # installer in app/src-tauri/target/release/bundle/
 ```
 
-Windows and macOS installers are built by `.github/workflows/desktop.yml`, which uploads them as artifacts.
+### Windows: one-time setup for the desktop app
+
+1. Install **Rust**: https://rustup.rs. Use the default options.
+2. Install **Microsoft C++ Build Tools**: https://visualstudio.microsoft.com/visual-cpp-build-tools/. Tick *Desktop development with C++*.
+3. WebView2 is already part of Windows 11.
+4. Open a new terminal in the repo and run `npm run tauri dev`. The first build takes a few minutes.
+
+Windows and macOS installers are also built by `.github/workflows/desktop.yml`, which uploads them as artifacts.
 
 ## Structure
 
