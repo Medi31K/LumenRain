@@ -48,7 +48,12 @@ Udenfor v1: grafer, enheder/konstanter (kandidater til v2).
 - A · Aurora Night: mørk, med nordlys-orbs i teal, violet og rose bag frostet glas
 - B · Liquid Daylight: lyst perlemor-glas (Liquid Glass-inspireret) med azur-accent
 - C · Rosé Rain: skumring i rosé og guld (Rosé Pine-inspireret)
-- **Valgt retning: Paper cutout ("Paper Rain")**
-  - D · Dag: cremefarvet karton med lag af blå papirbakker, papirskyer og regndråber. Accentfarven er terracotta `#E2674A`.
-  - E · Nat: mørkt blåt karton med en gul papirmåne `#F5C451` og blåsorte lag.
-  - Kendetegn: ark med bløde skygger og let rotation, tape-strimler, ligningsfelter som papirlapper og tomme felter med stiplet "klippelinje".
+- **Valgt retning: Paper cutout ("Lumenrain · Paper")**: både lys og mørk tilstand
+  - Day: cremefarvet karton, blå papirbølger og hvide papirskyer. Accentfarven er terracotta `#E2674A`.
+  - Night: dæmpet skumring `#1C2130` med lav kontrast. Accentfarven er periwinkle `#A9B8E0`. Ingen måne/sol.
+  - Skrivearket er lige og centreret, uden tape. Ligningsfelter er papirlapper, og tomme felter har en stiplet kant.
+  - Baggrunden bevæger sig langsomt: bølgerne vugger (parallax, 9–15 s), skyerne driver, og vindstrøg (papirstrimler) suser forbi hvert 6.–12. sekund. Ingen regn.
+  - Bevægelsen stopper, mens man skriver, følger OS-indstillingen "reduce motion" og kan slås fra i indstillingerne.
+
+## Sprog
+Engelsk som primært sprog, dansk som alternativ (i18n fra start; skift under Settings og som EN | DA-knap).
