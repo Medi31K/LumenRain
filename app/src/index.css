@@ -701,8 +701,8 @@ math-field:not(:focus):empty::before {
   position: relative;
   overflow: hidden;
   width: 46px;
-  height: 34px;
-  margin: 0;
+  height: 30px;
+  margin: 0 0 4px; /* small gap above the sheet; top stays level with the tabs */
   border: 0;
   border-radius: var(--lr-radius-lg);
   background: var(--lr-bg-sheet);
@@ -718,7 +718,7 @@ math-field:not(:focus):empty::before {
 }
 .tab-plus .plus-sign {
   position: relative;
-  font: 600 20px/34px var(--font-ui);
+  font: 600 20px/30px var(--font-ui);
 }
 .tabs {
   display: flex;
