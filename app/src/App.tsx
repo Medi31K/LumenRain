@@ -80,8 +80,7 @@ function loadSettings(): Settings {
   }
 }
 
-const SYMBOLS = ['\\alpha', '\\beta', '\\gamma', '\\Delta', '\\theta', '\\lambda', '\\mu', '\\pi', '\\rho', '\\sigma', '\\omega', '\\infty',
-  '\\pm', '\\cdot', '\\le', '\\ge', '\\ne', '\\approx', '\\sum_{#?}^{#?}', '\\int_{#?}^{#?}', '\\lim_{#?}', '\\log', '\\ln', '\\sin', '\\cos', '\\tan']
+import { OPERATOR_GROUPS } from './operators'
 
 function Tex({ latex }: { latex: string }) {
   const html = useMemo(() => convertLatexToMarkup(latex.replace(/#\?/g, '\\placeholder{}')), [latex])
@@ -96,6 +95,7 @@ export default function App() {
   const [variables, setVariables] = useState<Variable[]>([])
   const [panel, setPanel] = useState<Panel>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [symGroup, setSymGroup] = useState<(typeof OPERATOR_GROUPS)[number]['id']>('calculus')
   const [props, setPropsState] = useState<Property[] | null>(null)
   const [tabs, setTabs] = useState<NoteTab[]>([])
   const [activeId, setActiveId] = useState('')
@@ -408,15 +408,25 @@ export default function App() {
         </button>
         <div className="anchor">
           <button className={`btn ${panel === 'symbols' ? 'on' : ''}`} onClick={() => setPanel(panel === 'symbols' ? null : 'symbols')}>
-            α β π
+            ∂ ∫ α
           </button>
           {panel === 'symbols' && (
             <div className="popover symbols">
-              {SYMBOLS.map((s) => (
-                <button key={s} className="sym" onClick={() => insert(s)} title={s.replace(/_\{#\?\}|\^\{#\?\}/g, '')}>
-                  <Tex latex={s} />
-                </button>
-              ))}
+              <div className="segmented">
+                {OPERATOR_GROUPS.map((g) => (
+                  <button key={g.id} className={symGroup === g.id ? 'on' : ''} onClick={() => setSymGroup(g.id)}>
+                    {t.groups[g.id]}
+                  </button>
+                ))}
+              </div>
+              <div className="sym-grid">
+                {OPERATOR_GROUPS.find((g) => g.id === symGroup)!.items.map((o) => (
+                  <button key={o.latex} className="sym" onClick={() => insert(o.latex)} title={o.typed ? `${t.typeHint}: ${o.typed}` : undefined}>
+                    <Tex latex={(o.preview ?? o.latex).replace(/#@/g, 'x')} />
+                    {o.typed && <span className="sym-typed">{o.typed}</span>}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

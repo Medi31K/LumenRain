@@ -123,7 +123,7 @@ function formatValue(v: Boxed, opts: EngineOptions, lead = '='): string {
   const approx = v.N()
   const re = approx.re
   const im = approx.im
-  const numeric = typeof re === 'number' && (im === 0 || im === undefined || Number.isNaN(im))
+  const numeric = typeof re === 'number' && !Number.isNaN(re) && (im === 0 || im === undefined || Number.isNaN(im))
   const exactIsPlainNumber = isPlainNumber(v)
 
   if (exactIsPlainNumber && numeric) return `${lead}${formatNumber(re, opts)}`
@@ -169,7 +169,11 @@ function unknownsOf(e: Boxed, defined: Set<string>): string[] {
 function runOne(ce: ComputeEngine, src: string, opts: EngineOptions, defined: Set<string>, variables: Variable[]): Outcome {
   if (!src) return { kind: 'none' }
   let e: Boxed = ce.parse(src)
-  if (hasError(e)) return { kind: 'error', error: 'parse' }
+  if (hasError(e)) {
+    // Pure notation the engine doesn't compute (∇, bra-ket, vector arrows): not an error.
+    if (/\\(nabla|langle|rangle|vec|hat|dot|ddot|oint|iint|iiint|hbar|dagger|propto|forall|exists)\b/.test(src)) return { kind: 'none' }
+    return { kind: 'error', error: 'parse' }
+  }
 
   // a = b = 180 (an older answer typed or pasted back): drop the trailing number.
   const chain = opsOf(e)
@@ -210,9 +214,12 @@ function runOne(ce: ComputeEngine, src: string, opts: EngineOptions, defined: Se
   }
 
   if (unknownsOf(e, defined).length > 0) {
-    const s = e.simplify()
+    // Symbolic: evaluate (runs d/dx, ∂, ∫, lim, Σ and substitutes known variables), then tidy up.
+    let s = e.evaluate()
+    if (JSON.stringify(s.json).includes('"Error"')) s = e.simplify()
+    else s = s.simplify()
     if (s.latex === e.latex) return { kind: 'none' }
-    return { kind: 'value', result: `=${s.latex}` }
+    return { kind: 'value', result: formatValue(s, opts) }
   }
   return { kind: 'value', result: formatValue(e.evaluate(), opts) }
 }

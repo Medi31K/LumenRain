@@ -1,6 +1,8 @@
 import type { Lang } from './engine'
 
 const en = {
+  groups: { calculus: 'Calculus', vectors: 'Vectors & QM', algebra: 'Algebra', relations: 'Relations', greek: 'Greek' },
+  typeHint: 'type',
   notes: 'Notes',
   noteMenu: 'New note, templates',
   newBlankNote: 'New blank note',
@@ -82,6 +84,8 @@ const en = {
 }
 
 const da: typeof en = {
+  groups: { calculus: 'Analyse', vectors: 'Vektorer & KM', algebra: 'Algebra', relations: 'Relationer', greek: 'Græsk' },
+  typeHint: 'skriv',
   notes: 'Noter',
   noteMenu: 'Ny note, skabeloner',
   newBlankNote: 'Ny tom note',

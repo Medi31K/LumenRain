@@ -4,22 +4,15 @@
 import { MathfieldElement } from 'mathlive'
 import { inputOf, RESULT_CLASS, runDocument, type EngineOptions, type Outcome, type Variable } from './engine'
 import { isDisplay, type Block, type Inline } from './markdown'
+import { TYPED_SHORTCUTS } from './operators'
 
 MathfieldElement.soundsDirectory = null
 MathfieldElement.fontsDirectory = null
 
 const SHORTCUTS: Record<string, string> = {
-  // Word-style: "sqrt(" opens a root; ")" closes it again (see buildUp below).
-  'sqrt(': '\\sqrt{#?}',
-  'root(': '\\sqrt[#?]{#?}',
+  ...TYPED_SHORTCUTS,
   '*': '\\cdot',
   cdot: '\\cdot',
-  oo: '\\infty',
-  '<=': '\\le',
-  '>=': '\\ge',
-  '!=': '\\ne',
-  '+-': '\\pm',
-  deg: '^{\\circ}',
 }
 
 // ---------- Word "build-up" rules ----------
@@ -44,8 +37,11 @@ function caretAtom(mf: MathfieldElement): Atom | null {
   return model ? model.at(model.position) : null
 }
 
+// Limits of ∑, ∫, lim … are written in full ("n=1"), so they never build up early.
+const BIG_OPERATORS = ['extensible-symbol', 'operator', 'bigop']
 const ENDS_ON_OPERATOR = (a: Atom) =>
-  (a.parent?.type === 'genfrac' && a.parentBranch === 'below') || a.parentBranch === 'superscript' || a.parentBranch === 'subscript'
+  (a.parent?.type === 'genfrac' && a.parentBranch === 'below') ||
+  ((a.parentBranch === 'superscript' || a.parentBranch === 'subscript') && !BIG_OPERATORS.includes(a.parent?.type ?? ''))
 
 /** Returns true if the key was fully handled. */
 function buildUp(mf: MathfieldElement, key: string): boolean {
@@ -65,6 +61,27 @@ function buildUp(mf: MathfieldElement, key: string): boolean {
     return true
   }
   return false
+}
+
+/**
+ * MathLive forgets typed letters when the caret moves into a placeholder (Tab / →),
+ * so "rho" there stays r·h·o. Convert the letters right before the caret ourselves.
+ */
+function applyMissedShortcut(mf: MathfieldElement, shortcuts: Record<string, string>, keys: string[]) {
+  const model = modelOf(mf)
+  if (!model || !mf.selectionIsCollapsed) return
+  const pos = model.position
+  const last = model.at(pos) as Atom & { value?: string }
+  let word = ''
+  for (let i = pos; i > 0; i--) {
+    const a = model.at(i) as Atom & { value?: string }
+    if (a.parent !== last.parent || a.type !== 'mord' || !/^[a-zA-Z]$/.test(a.value ?? '')) break
+    word = a.value + word
+  }
+  const key = keys.find((k) => word.endsWith(k) && shortcuts[k])
+  if (!key) return
+  mf.selection = { ranges: [[pos - key.length, pos]] }
+  mf.executeCommand(['insert', shortcuts[key], { selectionMode: 'placeholder' }])
 }
 
 /** Fractions, roots, exponents, brackets … anything Word treats as one "structure". */
@@ -305,7 +322,16 @@ export class DocEditor {
     mf.addEventListener('mount', () => {
       const shortcuts = { ...mf.inlineShortcuts, ...SHORTCUTS }
       delete shortcuts.sqrt // so that "sqrt(" can match
+      delete shortcuts.dx // "ddx" / "int … dx" are ours
       mf.inlineShortcuts = shortcuts
+      // Letter-only names that aren't the start of a longer one (else "sin" would beat "sinh").
+      const names = Object.keys(shortcuts).filter((k) => /^[a-zA-Z]{2,}$/.test(k))
+      const keys = names.filter((k) => !names.some((o) => o !== k && o.startsWith(k))).sort((x, y) => y.length - x.length)
+      const latexOf = (v: unknown) => (typeof v === 'string' ? v : ((v as { value?: string } | null)?.value ?? ''))
+      const flat = Object.fromEntries(keys.map((k) => [k, latexOf((shortcuts as Record<string, unknown>)[k])]).filter(([, v]) => v))
+      mf.addEventListener('input', (e) => {
+        if ((e as InputEvent).inputType !== 'deleteContentBackward') queueMicrotask(() => applyMissedShortcut(mf, flat, keys))
+      })
       mf.menuItems = []
       const style = document.createElement('style')
       style.textContent = SHADOW_STYLE

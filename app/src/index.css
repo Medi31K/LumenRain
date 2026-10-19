@@ -319,17 +319,30 @@ body {
 }
 .symbols {
   display: grid;
-  grid-template-columns: repeat(6, 40px);
+  gap: 10px;
+  width: 560px;
+}
+.sym-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
 }
 .sym {
-  height: 36px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 58px;
+  padding: 4px 2px;
   border: 0;
   border-radius: var(--lr-radius-sm);
   background: transparent;
   color: var(--lr-text-primary);
   cursor: pointer;
   font-size: 15px;
+}
+.sym-typed {
+  font: 600 10px var(--font-ui);
+  color: var(--lr-text-muted);
 }
 .sym:hover {
   background: var(--lr-bg-slip);
