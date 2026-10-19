@@ -26,15 +26,14 @@ Udenfor v1: grafer, enheder/konstanter (kandidater til v2).
 | App-skal | Tauri 2 | Lille binær, native vinduer på Win/Mac, understøtter vibrancy/acrylic (ægte glas) |
 | UI | React + TypeScript | |
 | 2D-editor | MathLive | WordMat-agtig indtastning, LaTeX/MathML-eksport |
-| Beregning | math.js (BigNumber + Fraction) | Eksakte brøker, ingen 0,1+0,2-fejl |
-| CAS | Nerdamer eller SymPy via Pyodide (afgøres i prototype) | Symbolsk ligningsløsning |
+| Beregning + CAS | Cortex Compute Engine (følger med MathLive) | Læser LaTeX direkte, eksakte brøker/rødder, løser ligninger |
 | Gem | Lokale .lmr-filer (JSON) + autosave | |
 
 ## Faser
-1. Low-fi-skitser + plan ← **nu**
-2. Design system i Figma: farver, glas-lag, typografi, komponenter
-3. Hi-fi-skærme (lys + mørk) og godkendelse
-4. Prototype: Tauri-skal + MathLive + math.js-motor
+1. Low-fi-skitser + plan ✅
+2. Design system i Figma: farver, papirlag, typografi, komponenter ✅
+3. Hi-fi-skærme (lys + mørk). Delvist: Figma-grænsen blev nået, og prototypen bruges i stedet ✅
+4. Prototype: Tauri-skal, MathLive og Compute Engine ← **nu (v0.1)**
 5. Variable, historik, eksport og indstillinger
 6. Test (enhedstest af parser/motor), installers til Win/Mac
 

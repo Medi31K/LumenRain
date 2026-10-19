@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="s" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="-10" stdDeviation="14" flood-color="#14120f" flood-opacity="0.28"/></filter>
+    <filter id="c" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#14120f" flood-opacity="0.2"/></filter>
+    <clipPath id="r"><rect width="1024" height="1024" rx="230"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="#F4ECDD"/>
+    <g filter="url(#c)" fill="#FFFFFF">
+      <ellipse cx="380" cy="330" rx="130" ry="90"/><ellipse cx="530" cy="280" rx="160" ry="135"/><ellipse cx="690" cy="330" rx="130" ry="95"/>
+    </g>
+    <path filter="url(#s)" fill="#BFD8E6" d="M0 1024 L0 560 Q128 500 256 560 T512 560 T768 560 T1024 560 L1024 1024Z"/>
+    <path filter="url(#s)" fill="#8FB9D1" d="M0 1024 L0 650 Q128 710 256 650 T512 650 T768 650 T1024 650 L1024 1024Z"/>
+    <path filter="url(#s)" fill="#5E93B5" d="M0 1024 L0 750 Q128 690 256 750 T512 750 T768 750 T1024 750 L1024 1024Z"/>
+    <path filter="url(#s)" fill="#3C6E91" d="M0 1024 L0 850 Q128 910 256 850 T512 850 T768 850 T1024 850 L1024 1024Z"/>
+    <path d="M250 470 C 380 430 500 500 640 450 C 720 420 720 370 680 380 C 650 390 660 420 690 410" fill="none" stroke="#E2674A" stroke-width="22" stroke-linecap="round"/>
+  </g>
+</svg>
