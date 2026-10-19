@@ -2,8 +2,22 @@ import { unwrapResult } from './engine'
 
 export type Inline = { t: 'text'; s: string } | { t: 'eq'; latex: string }
 export interface Block {
-  type: 'h1' | 'h2' | 'p'
+  type: 'h1' | 'h2' | 'h3' | 'p' | 'li' | 'hr'
   inlines: Inline[]
+  /** No blank line before this block in the Markdown (keeps templates byte-exact). */
+  tight?: boolean
+}
+
+/** An Obsidian property (YAML frontmatter entry). Lists are kept as arrays. */
+export interface Property {
+  key: string
+  value: string | string[]
+}
+
+export interface Doc {
+  /** null = the note has no Properties block. */
+  props: Property[] | null
+  blocks: Block[]
 }
 
 /** A paragraph that holds nothing but one equation is a display equation ($$). */
@@ -15,21 +29,103 @@ export function isDisplay(b: Block): boolean {
 const escapeText = (s: string) => s.replace(/\$/g, '\\$')
 const mathOf = (latex: string) => unwrapResult(latex, true)
 
-/** Serialises the document for Obsidian: inline math `$…$`, display math `$$…$$`. */
-export function toMarkdown(blocks: Block[]): string {
-  return blocks
-    .map((b) => {
-      if (isDisplay(b)) {
-        const eq = b.inlines.find((i) => i.t === 'eq') as { latex: string }
-        return `$$\n${mathOf(eq.latex)}\n$$`
-      }
-      const body = b.inlines.map((i) => (i.t === 'eq' ? `$${mathOf(i.latex)}$` : escapeText(i.s))).join('')
-      if (b.type === 'h1') return `# ${body}`
-      if (b.type === 'h2') return `## ${body}`
+// ---------- frontmatter ----------
+
+function yamlScalar(v: string): string {
+  return /^[\s]|[\s]$|^[-?:,[\]{}#&*!|>'"%@`]|: | #/.test(v) ? JSON.stringify(v) : v
+}
+
+export function propsToYaml(props: Property[]): string {
+  const lines = props.map((p) => {
+    if (Array.isArray(p.value)) {
+      const items = p.value.filter((v) => v.trim() !== '')
+      return items.length ? `${p.key}:\n${items.map((v) => `  - ${yamlScalar(v)}`).join('\n')}` : `${p.key}:`
+    }
+    return p.value.trim() === '' ? `${p.key}:` : `${p.key}: ${yamlScalar(p.value)}`
+  })
+  return `---\n${lines.join('\n')}\n---`
+}
+
+const unquote = (s: string) => {
+  const t = s.trim()
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1)
+  return t
+}
+
+/** Parses the small YAML subset Obsidian writes for properties. */
+export function parseYaml(lines: string[]): Property[] {
+  const props: Property[] = []
+  for (const line of lines) {
+    const item = line.match(/^\s+-\s?(.*)$/)
+    if (item && props.length) {
+      const last = props[props.length - 1]
+      if (!Array.isArray(last.value)) last.value = last.value ? [last.value] : []
+      last.value.push(unquote(item[1]))
+      continue
+    }
+    const kv = line.match(/^([^:#][^:]*):\s*(.*)$/)
+    if (!kv) continue
+    const raw = kv[2].trim()
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+      props.push({ key: kv[1].trim(), value: raw.slice(1, -1).split(',').map(unquote).filter(Boolean) })
+    } else {
+      props.push({ key: kv[1].trim(), value: unquote(raw) })
+    }
+  }
+  return props
+}
+
+// ---------- blocks ----------
+
+function inlineMarkdown(b: Block): string {
+  return b.inlines.map((i) => (i.t === 'eq' ? `$${mathOf(i.latex)}$` : escapeText(i.s))).join('')
+}
+
+function blockMarkdown(b: Block): string {
+  if (b.type === 'hr') return '---'
+  if (isDisplay(b)) {
+    const eq = b.inlines.find((i) => i.t === 'eq') as { latex: string }
+    return `$$\n${mathOf(eq.latex)}\n$$`
+  }
+  const body = inlineMarkdown(b)
+  switch (b.type) {
+    case 'h1':
+      return `# ${body}`
+    case 'h2':
+      return `## ${body}`
+    case 'h3':
+      return `### ${body}`
+    case 'li':
+      return `- ${body}`
+    default:
       return body
-    })
-    .filter((s, i, all) => s.trim() !== '' || i < all.length - 1)
-    .join('\n\n')
+  }
+}
+
+const HEADING_OR_RULE = ['hr', 'h1', 'h2', 'h3']
+
+/** Whether two blocks may sit on consecutive lines without changing their meaning. */
+function tightBetween(prev: Block, b: Block): boolean {
+  if (isDisplay(b) || isDisplay(prev)) return false
+  if (b.type === 'hr' && prev.type === 'p') return false // would turn the text into a heading
+  const safe = b.type === 'li' ? prev.type !== 'hr' || b.tight === true : HEADING_OR_RULE.includes(b.type) || HEADING_OR_RULE.includes(prev.type)
+  if (!safe) return false
+  return b.tight ?? (b.type === 'li' && (prev.type === 'li' || prev.type === 'p'))
+}
+
+/**
+ * Serialises a note for Obsidian: Properties as frontmatter, inline math `$…$`,
+ * display math `$$…$$`, and lists kept tight under the line that introduces them.
+ */
+export function toMarkdown(blocks: Block[], props: Property[] | null = null): string {
+  let out = props ? `${propsToYaml(props)}\n` : ''
+  blocks.forEach((b, i) => {
+    const prev = blocks[i - 1]
+    if (prev) out += tightBetween(prev, b) ? '\n' : '\n\n'
+    else if (props && !b.tight) out += '\n'
+    out += blockMarkdown(b)
+  })
+  return out.replace(/\n+$/, '')
 }
 
 function parseInlines(line: string): Inline[] {
@@ -58,15 +154,35 @@ function parseInlines(line: string): Inline[] {
   return out
 }
 
-export function fromMarkdown(md: string): Block[] {
+export function parseDocument(md: string): Doc {
   const lines = md.replace(/\r\n/g, '\n').split('\n')
+  let start = 0
+  let props: Property[] | null = null
+  if (lines[0]?.trim() === '---') {
+    const end = lines.findIndex((l, i) => i > 0 && l.trim() === '---')
+    if (end > 0) {
+      props = parseYaml(lines.slice(1, end))
+      start = end + 1
+    }
+  }
+
   const blocks: Block[] = []
   let para: string[] = []
+  let paraTight = false
+  let blank = false
+  const push = (b: Block) => {
+    b.tight = !blank && (blocks.length > 0 || props !== null)
+    blank = false
+    blocks.push(b)
+  }
   const flush = () => {
-    if (para.length) blocks.push({ type: 'p', inlines: parseInlines(para.join(' ')) })
+    if (para.length) {
+      blank = !paraTight
+      push({ type: 'p', inlines: parseInlines(para.join(' ')) })
+    }
     para = []
   }
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = start; i < lines.length; i++) {
     const line = lines[i]
     const trimmed = line.trim()
     if (trimmed.startsWith('$$')) {
@@ -80,17 +196,29 @@ export function fromMarkdown(md: string): Block[] {
         if (i < lines.length) parts.push(lines[i].trim().slice(0, -2))
         body = parts.join(' ')
       }
-      blocks.push({ type: 'p', inlines: [{ t: 'eq', latex: body.trim() }] })
+      push({ type: 'p', inlines: [{ t: 'eq', latex: body.trim() }] })
+    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flush()
+      push({ type: 'hr', inlines: [] })
     } else if (/^#{1,6}\s/.test(trimmed)) {
       flush()
       const level = trimmed.match(/^#+/)![0].length
-      blocks.push({ type: level === 1 ? 'h1' : 'h2', inlines: parseInlines(trimmed.replace(/^#+\s*/, '')) })
+      push({ type: level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3', inlines: parseInlines(trimmed.replace(/^#+\s*/, '')) })
+    } else if (/^[-*+](\s|$)/.test(trimmed)) {
+      flush()
+      push({ type: 'li', inlines: parseInlines(trimmed.replace(/^[-*+]\s?/, '')) })
     } else if (trimmed === '') {
       flush()
+      blank = true
     } else {
+      if (!para.length) paraTight = !blank && (blocks.length > 0 || props !== null)
       para.push(trimmed)
     }
   }
   flush()
-  return blocks
+  return { props, blocks }
+}
+
+export function fromMarkdown(md: string): Block[] {
+  return parseDocument(md).blocks
 }

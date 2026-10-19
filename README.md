@@ -18,6 +18,12 @@ It has a paper-cutout theme in Day and Night, and exports to Obsidian Markdown.
 - **Result format.** Exact ⇄ ≈ cycles between exact, decimal and both. The number of significant digits is set in Settings.
 - **Obsidian export.** Inline maths becomes `$…$` and display maths becomes `$$…$$`. You can copy it, save it as `.md`, and import Markdown back.
 - **Paper theme in Day and Night.** The waves sway, the clouds drift and wind gusts pass by. The scenery pauses while you type and respects the OS "reduce motion" setting.
+- **Obsidian templates.** *Note ▾* creates a new note from a template, or applies one to the current note. **ROOT - NOTE** is built in.
+  - Fill in Properties (date, tags, status) the way you do in Obsidian.
+  - `{{Title}}` and `{{date}}` are filled in automatically.
+  - The export is 1:1 with your template: frontmatter, `---` lines and bullet lists.
+  - You can add your own templates or paste one copied straight from Obsidian.
+- **Markdown shortcuts while writing:** `# `, `## `, `### `, `- `, and `---` + Enter.
 - **English and Danish.** Danish uses a decimal comma (`2,5`).
 - Autosave to local storage.
 

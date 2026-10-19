@@ -523,3 +523,164 @@ math-field:not(:focus):empty::before {
     padding: 28px 20px;
   }
 }
+
+/* ---------- Obsidian structures: lines, bullets, properties ---------- */
+.page hr {
+  border: 0;
+  height: 2px;
+  margin: 18px 0;
+  background: linear-gradient(90deg, transparent, var(--lr-border-cut) 15%, var(--lr-border-cut) 85%, transparent);
+  opacity: 0.8;
+}
+.page .li {
+  position: relative;
+  padding-left: 26px;
+  margin: 0 0 4px;
+  min-height: 1.7em;
+}
+.page .li::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0.78em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lr-bg-accent);
+}
+.page h3 {
+  font: 600 18px/1.4 var(--font-head);
+  margin: 18px 0 6px;
+}
+
+.properties {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  background: var(--lr-bg-slip);
+  border-radius: var(--lr-radius-md);
+  box-shadow: var(--lift-sm);
+}
+.properties h4 {
+  margin: 0 0 6px;
+  font: 600 13px var(--font-ui);
+  color: var(--lr-text-muted);
+}
+.prop {
+  display: grid;
+  grid-template-columns: 22px 130px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--lr-radius-sm);
+}
+.prop:hover,
+.prop:focus-within {
+  background: color-mix(in srgb, var(--lr-bg-sheet) 70%, transparent);
+}
+.prop-icon {
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.75;
+}
+.prop input {
+  font: 14px var(--font-ui);
+  color: var(--lr-text-primary);
+  background: transparent;
+  border: 0;
+  padding: 5px 6px;
+  border-radius: var(--lr-radius-sm);
+  min-width: 0;
+  color-scheme: inherit;
+}
+.prop input:focus {
+  outline: 1.5px solid var(--lr-border-focus);
+  background: var(--lr-bg-sheet);
+}
+.prop input::placeholder {
+  color: var(--lr-text-muted);
+  opacity: 0.7;
+}
+.prop-key {
+  color: var(--lr-text-muted) !important;
+}
+.prop-remove {
+  border: 0;
+  background: transparent;
+  color: var(--lr-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  font-size: 16px;
+}
+.prop:hover .prop-remove,
+.prop:focus-within .prop-remove {
+  opacity: 1;
+}
+.prop-add {
+  justify-self: start;
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--lr-text-muted);
+  font: 600 13px var(--font-ui);
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.prop-add:hover {
+  color: var(--lr-text-primary);
+}
+
+/* ---------- Note dialog ---------- */
+.note-dialog .field {
+  display: grid;
+  gap: 4px;
+}
+.note-dialog .field span {
+  font: 600 12px var(--font-ui);
+  color: var(--lr-text-muted);
+}
+.note-dialog input:not([type='radio']),
+.note-dialog select {
+  font: 15px var(--font-ui);
+  color: var(--lr-text-primary);
+  background: var(--lr-bg-slip);
+  border: 0;
+  border-radius: var(--lr-radius-md);
+  padding: 8px 10px;
+  outline: 1px solid transparent;
+}
+.note-dialog input:focus,
+.note-dialog select:focus {
+  outline-color: var(--lr-border-focus);
+}
+.templates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.templates li {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: var(--lr-bg-slip);
+  border-radius: var(--lr-radius-md);
+}
+.templates .tpl-name {
+  font-weight: 700 !important;
+  background: transparent !important;
+  min-width: 0;
+  flex: 1;
+}
+.templates .check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--lr-text-muted);
+  white-space: nowrap;
+}
+.templates textarea {
+  max-height: 320px;
+}

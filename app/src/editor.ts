@@ -84,6 +84,26 @@ const SHADOW_STYLE = `
   :host(.has-error) .ML__content { text-decoration: underline wavy var(--lr-text-error); text-underline-offset: 6px; }
 `
 
+function blockType(el: HTMLElement): Block['type'] {
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'hr') return 'hr'
+  if (el.classList.contains('li')) return 'li'
+  return tag === 'h1' || tag === 'h2' || tag === 'h3' ? tag : 'p'
+}
+
+/** Visible text of a block (ignores caret anchors). */
+const blockText = (el: Element) => (el.textContent ?? '').replace(/\u200B/g, '')
+
+/** True when the collapsed caret sits at the very start of `block`. */
+function caretAtBlockStart(block: HTMLElement): boolean {
+  const sel = window.getSelection()
+  if (!sel || !sel.isCollapsed || !sel.rangeCount) return false
+  const r = document.createRange()
+  r.setStart(block, 0)
+  r.setEnd(sel.focusNode!, sel.focusOffset)
+  return r.toString().replace(/\u200B/g, '') === '' && !r.cloneContents().querySelector?.('.eq')
+}
+
 export interface EditorHooks {
   onChange(): void
   onVariables(vars: Variable[]): void
@@ -144,7 +164,9 @@ export class DocEditor {
   load(blocks: Block[]) {
     this.root.replaceChildren(
       ...blocks.map((b) => {
-        const el = document.createElement(b.type)
+        const el = this.makeBlock(b.type)
+        if (b.tight !== undefined) el.dataset.tight = b.tight ? '1' : '0'
+        if (b.type === 'hr') return el
         for (const i of b.inlines) el.append(i.t === 'text' ? document.createTextNode(i.s) : this.makeEquation(i.latex))
         if (!el.childNodes.length) el.append(document.createElement('br'))
         return el
@@ -157,9 +179,13 @@ export class DocEditor {
 
   save(): Block[] {
     const blocks: Block[] = []
-    for (const node of Array.from(this.root.children)) {
-      const tag = node.tagName.toLowerCase()
-      const type = tag === 'h1' || tag === 'h2' ? tag : 'p'
+    for (const node of Array.from(this.root.children) as HTMLElement[]) {
+      const type = blockType(node)
+      const tight = node.dataset.tight === undefined ? undefined : node.dataset.tight === '1'
+      if (type === 'hr') {
+        blocks.push({ type, inlines: [], tight })
+        continue
+      }
       const inlines: Inline[] = []
       const walk = (n: Node) => {
         if (n.nodeType === Node.TEXT_NODE) {
@@ -175,9 +201,41 @@ export class DocEditor {
         }
       }
       node.childNodes.forEach(walk)
-      blocks.push({ type, inlines })
+      blocks.push({ type, inlines, tight })
     }
     return blocks
+  }
+
+  private makeBlock(type: Block['type']): HTMLElement {
+    if (type === 'li') {
+      const el = document.createElement('div')
+      el.className = 'li'
+      return el
+    }
+    if (type === 'hr') {
+      const hr = document.createElement('hr')
+      hr.contentEditable = 'false'
+      return hr
+    }
+    return document.createElement(type)
+  }
+
+  /** Replaces a block element with one of another type, keeping its content and the caret. */
+  private convertBlock(block: HTMLElement, type: Block['type'], stripPrefix = 0): HTMLElement {
+    const el = this.makeBlock(type)
+    if (stripPrefix && block.firstChild?.nodeType === Node.TEXT_NODE) {
+      const first = block.firstChild as Text
+      first.textContent = (first.textContent ?? '').slice(stripPrefix)
+    }
+    el.append(...Array.from(block.childNodes))
+    if (!el.textContent && !el.querySelector('.eq')) el.replaceChildren(document.createElement('br'))
+    block.replaceWith(el)
+    const r = document.createRange()
+    r.setStart(el, 0)
+    const sel = window.getSelection()!
+    sel.removeAllRanges()
+    sel.addRange(r)
+    return el
   }
 
   private emptyParagraph() {
@@ -446,6 +504,42 @@ export class DocEditor {
       this.insertEquation()
       return
     }
+    if (!inField && (e.key === 'Enter' || e.key === 'Backspace') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const sel = window.getSelection()
+      const block = sel?.focusNode ? this.blockOf(sel.focusNode) : null
+      if (block && this.root.contains(block)) {
+        const type = blockType(block)
+        const empty = blockText(block) === '' && !block.querySelector('.eq')
+        if (e.key === 'Enter' && type === 'li' && empty) {
+          // Enter on an empty bullet ends the list (Obsidian/Word).
+          e.preventDefault()
+          this.convertBlock(block, 'p')
+          this.afterStructureChange()
+          return
+        }
+        if (e.key === 'Enter' && type === 'p' && /^(-{3,}|\*{3,}|_{3,})$/.test(blockText(block).trim())) {
+          // "---" + Enter draws a line.
+          e.preventDefault()
+          const hr = this.makeBlock('hr')
+          const p = this.emptyParagraph()
+          block.replaceWith(hr)
+          hr.after(p)
+          const r = document.createRange()
+          r.setStart(p, 0)
+          sel!.removeAllRanges()
+          sel!.addRange(r)
+          this.afterStructureChange()
+          return
+        }
+        if (e.key === 'Backspace' && type !== 'p' && caretAtBlockStart(block)) {
+          // Backspace at the start of a bullet/heading turns it back into text.
+          e.preventDefault()
+          this.convertBlock(block, 'p')
+          this.afterStructureChange()
+          return
+        }
+      }
+    }
     if (!inField && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const rect = this.textCaretRect()
       if (rect) {
@@ -487,25 +581,22 @@ export class DocEditor {
 
   private onRootInput = () => {
     this.hooks.onTyping()
-    // Markdown-style headings: "# " and "## " at the start of a paragraph.
+    // Markdown-style shortcuts at the start of a paragraph: "# ", "## ", "### ", "- ".
     const sel = window.getSelection()
     const block = sel?.focusNode ? this.blockOf(sel.focusNode) : null
-    if (block && block.tagName === 'P') {
-      const m = (block.textContent ?? '').match(/^(#{1,2})[\s ]/)
-      if (m && block.firstChild?.nodeType === Node.TEXT_NODE) {
-        const h = document.createElement(m[1].length === 1 ? 'h1' : 'h2')
-        const first = block.firstChild as Text
-        first.textContent = (first.textContent ?? '').slice(m[0].length)
-        h.append(...Array.from(block.childNodes))
-        if (!h.textContent) h.append(document.createElement('br'))
-        block.replaceWith(h)
-        const r = document.createRange()
-        r.setStart(h, 0)
-        sel!.removeAllRanges()
-        sel!.addRange(r)
+    if (block && block.tagName === 'P' && block.firstChild?.nodeType === Node.TEXT_NODE) {
+      const m = (block.firstChild.textContent ?? '').match(/^(#{1,3}|[-*])[\s\u00A0]/)
+      if (m) {
+        const type = m[1] === '-' || m[1] === '*' ? 'li' : (['h1', 'h2', 'h3'] as const)[m[1].length - 1]
+        this.convertBlock(block, type, m[0].length)
       }
     }
     if (!this.root.firstElementChild) this.root.append(this.emptyParagraph())
+    this.refreshDisplayClasses()
+    this.hooks.onChange()
+  }
+
+  private afterStructureChange() {
     this.refreshDisplayClasses()
     this.hooks.onChange()
   }
