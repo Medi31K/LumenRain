@@ -701,7 +701,7 @@ math-field:not(:focus):empty::before {
   position: relative;
   overflow: hidden;
   width: 46px;
-  height: 30px; /* same as a tab */
+  height: 34px;
   margin: 0;
   border: 0;
   border-radius: var(--lr-radius-lg);
@@ -718,13 +718,11 @@ math-field:not(:focus):empty::before {
 }
 .tab-plus .plus-sign {
   position: relative;
-  font: 600 20px/30px var(--font-ui);
+  font: 600 20px/34px var(--font-ui);
 }
 .meniscus {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
 }
 .meniscus .water {
   fill: var(--lr-bg-accent);
@@ -735,13 +733,6 @@ math-field:not(:focus):empty::before {
 .tab-plus:hover .water,
 .tab-plus.on .water {
   transform: translateY(-6px);
-}
-.motion .tab-plus .water {
-  animation: slosh 4s ease-in-out infinite alternate;
-}
-@keyframes slosh {
-  from { d: path('M0 60 L0 22 C0 30 8 30 20 30 C32 30 40 30 40 22 L40 60 Z'); }
-  to { d: path('M0 60 L0 23 C0 30 9 31 20 31 C31 31 40 29 40 21 L40 60 Z'); }
 }
 .tabs {
   display: flex;
@@ -756,7 +747,6 @@ math-field:not(:focus):empty::before {
   align-items: center;
   max-width: 200px;
   min-width: 90px;
-  height: 30px;
   padding-left: 12px;
   border-radius: var(--lr-radius-lg) var(--lr-radius-lg) 0 0;
   background: color-mix(in srgb, var(--lr-bg-sheet) 55%, transparent);
