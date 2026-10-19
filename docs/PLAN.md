@@ -6,7 +6,8 @@ Figma (low-fi): https://www.figma.com/design/5wj8aGzwvICBvt7NuCsowP
 En selvstændig desktop-lommeregner (Windows/macOS), hvor man skriver matematik lige så nemt som i WordMat: tekst-genveje bliver straks til pæn 2D-matematik. Den får et eget tema i glas/blød moderne stil.
 
 ## Scope v1
-- Regneark med én beregning pr. linje. Enter giver resultat.
+- Dokument som i Word: almindelig tekst med indlejrede ligningsfelter (Alt+M indsætter et nyt felt). Feltet har håndtag ⋮ og menu ▾.
+- Enter i et felt beregner, og resultatet tilføjes efter "=" i samme felt.
 - Live 2D-input: `/` giver brøk, `^` potens, `_` indeks, `sqrt` kvadratrod, `pi` π, græske bogstaver.
 - Autoforslag-popup (Tab/Enter). Piletaster navigerer i brøker og rødder.
 - Variable (`m = 2,5`), som genbruges i senere linjer. Historik i sidepanelet.
@@ -34,7 +35,7 @@ Udenfor v1: CAS/ligningsløsning, grafer, enheder/konstanter (kandidater til v2)
 6. Test (enhedstest af parser/motor), installers til Win/Mac
 
 ## Skærme (low-fi)
-1. Regneark (hovedvindue)
+1. Regneark: Word-dokument med ligningsfelter
 2. Live 2D-input + autoforslag
 3. Resultat-handlinger
 4. Indstillinger & tema
