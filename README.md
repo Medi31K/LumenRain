@@ -30,6 +30,20 @@ It has a paper-cutout theme in Day and Night, and exports to Obsidian Markdown.
 - **English and Danish.** Danish uses a decimal comma (`2,5`).
 - Autosave to local storage.
 
+## Download
+
+Get the installer for your system from **[Releases](https://github.com/Medi31K/legendary-sniffle/releases/latest)**:
+- **Windows:** `…_x64-setup.exe`
+- **macOS:** `…_universal.dmg`
+- **Linux:** `.AppImage` / `.deb`
+
+The installers aren't code-signed yet. On Windows choose *More info → Run anyway*. On macOS right-click the app and choose *Open* the first time.
+
+### Making a release
+1. Bump `version` in `app/src-tauri/tauri.conf.json` (and `app/package.json`).
+2. Run the **Release** workflow from the Actions tab, or push a tag `vX.Y.Z`.
+3. The workflow builds Windows, macOS and Linux installers into a **draft release**. Check it and press *Publish*.
+
 ## Develop
 
 Run these from the repo root. They forward to `app/`, so running them inside `app/` works too.

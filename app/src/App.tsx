@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { convertLatexToMarkup } from 'mathlive'
 import { Background } from './Background'
 import { Splash } from './Splash'
+import { saveMarkdownFile } from './desktop'
 import { DocEditor } from './editor'
 import type { EngineOptions, Lang, ResultMode, Variable } from './engine'
 import { commandFor, DEFAULT_HOTKEYS, formatHotkey, type Command, type Hotkeys } from './hotkeys'
@@ -309,14 +310,7 @@ export default function App() {
     setCopied(true)
   }
 
-  const saveMarkdown = () => {
-    const blob = new Blob([markdown], { type: 'text/markdown' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${(activeTitle || 'Lumenrain').replace(/[\\/:*?"<>|]/g, '')}.md`
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }
+  const saveMarkdown = () => saveMarkdownFile(`${(activeTitle || 'Lumenrain').replace(/[\\/:*?"<>|]/g, '')}.md`, markdown)
 
   const doImport = () => {
     if (!importText.trim()) return
