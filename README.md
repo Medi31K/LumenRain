@@ -10,7 +10,7 @@
 A calm, paper-cutout desktop notebook for engineering physics.</p>
 
 <p align="center">
-  <a href="https://github.com/Medi31K/legendary-sniffle/releases/latest"><b>⬇ Download for Windows · macOS · Linux</b></a>
+  <a href="https://github.com/Medi31K/LumenRain/releases/latest"><b>⬇ Download for Windows · macOS · Linux</b></a>
 </p>
 
 ---
@@ -72,7 +72,7 @@ There is also a palette with tabs (Calculus · Vectors & QM · Algebra · Relati
 
 ## Download
 
-Get the installer for your system from **[Releases](https://github.com/Medi31K/legendary-sniffle/releases/latest)**:
+Get the installer for your system from **[Releases](https://github.com/Medi31K/LumenRain/releases/latest)**:
 
 | System | File |
 |---|---|
