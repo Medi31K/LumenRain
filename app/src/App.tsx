@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { convertLatexToMarkup } from 'mathlive'
 import { Background } from './Background'
+import { Splash } from './Splash'
 import { DocEditor } from './editor'
 import type { EngineOptions, Lang, ResultMode, Variable } from './engine'
 import { commandFor, DEFAULT_HOTKEYS, formatHotkey, type Command, type Hotkeys } from './hotkeys'
@@ -101,6 +102,7 @@ export default function App() {
   const [activeId, setActiveId] = useState('')
   const [source, setSource] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
+  const [ready, setReady] = useState(false)
   const [copied, setCopied] = useState(false)
   const [importText, setImportText] = useState('')
   const [markdown, setMarkdown] = useState('')
@@ -214,6 +216,8 @@ export default function App() {
       setActiveId(active)
       showDoc(readJson<Doc>(noteKey(active)) ?? { props: null, blocks: [] })
     }
+    // Ready once the math fonts and engine are warm (the first recompute happened above).
+    document.fonts.ready.then(() => setReady(true))
     return () => ed.destroy()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -391,6 +395,7 @@ export default function App() {
   return (
     <div className={`app ${settings.motion ? 'motion' : ''} ${typing ? 'typing' : ''}`}>
       <Background />
+      <Splash ready={ready} />
 
       <header className="toolbar" onMouseDown={keepFocus}>
         <span className="brand" role="img" aria-label="Lumenrain">

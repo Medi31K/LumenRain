@@ -193,7 +193,113 @@ export class DocEditor {
     root.addEventListener('keydown', this.onRootKey)
     root.addEventListener('input', this.onRootInput)
     root.addEventListener('pointerdown', this.resetGoal)
+    root.addEventListener('keydown', this.onUndoKey, true)
+    root.addEventListener('beforeinput', this.onBeforeInput)
     document.addEventListener('selectionchange', this.markSelected)
+    this.observer = new MutationObserver(() => this.scheduleSnapshot())
+    this.observer.observe(root, { subtree: true, childList: true, characterData: true })
+  }
+
+  // ---------- undo / redo ----------
+  // The browser's own undo doesn't know about equations (inserted by script), so the
+  // document keeps snapshots: one per burst of typing and one before every structural change.
+
+  private history: string[] = []
+  private historyIndex = -1
+  private snapshotTimer: number | undefined
+  private restoring = false
+  private lastUndoKey = 0
+  private observer: MutationObserver
+
+  private serialize() {
+    return JSON.stringify(this.save())
+  }
+
+  /** Records the current state if it differs from the last one. */
+  checkpoint() {
+    window.clearTimeout(this.snapshotTimer)
+    this.snapshotTimer = undefined
+    if (this.restoring) return
+    const s = this.serialize()
+    if (s === this.history[this.historyIndex]) return
+    this.history = this.history.slice(0, this.historyIndex + 1)
+    this.history.push(s)
+    if (this.history.length > 300) this.history.shift()
+    this.historyIndex = this.history.length - 1
+  }
+
+  private scheduleSnapshot() {
+    if (this.restoring) return
+    window.clearTimeout(this.snapshotTimer)
+    this.snapshotTimer = window.setTimeout(() => this.checkpoint(), 700)
+  }
+
+  /** First key after a pause: remember the state before it changes anything. */
+  private beforeEdit() {
+    if (this.snapshotTimer === undefined) this.checkpoint()
+  }
+
+  undo() {
+    this.checkpoint()
+    if (this.historyIndex > 0) this.restore(this.history[--this.historyIndex])
+  }
+
+  redo() {
+    this.checkpoint()
+    if (this.historyIndex < this.history.length - 1) this.restore(this.history[++this.historyIndex])
+  }
+
+  private restore(state: string) {
+    const target = JSON.parse(state) as Block[]
+    const current = this.save()
+    let changed = 0
+    while (changed < target.length && changed < current.length && JSON.stringify(target[changed]) === JSON.stringify(current[changed])) changed++
+    this.restoring = true
+    this.loadBlocks(target)
+    // Caret at the end of the first block that changed.
+    const el = this.root.children[Math.min(changed, this.root.children.length - 1)] as HTMLElement | undefined
+    if (el) {
+      const r = document.createRange()
+      r.selectNodeContents(el)
+      r.collapse(false)
+      this.root.focus({ preventScroll: true })
+      const sel = window.getSelection()!
+      sel.removeAllRanges()
+      sel.addRange(r)
+      el.scrollIntoView({ block: 'nearest' })
+    }
+    this.hooks.onChange()
+    window.setTimeout(() => (this.restoring = false))
+  }
+
+  private onUndoKey = (e: KeyboardEvent) => {
+    const mod = e.ctrlKey || e.metaKey
+    const inField = (e.target as HTMLElement).closest?.('.eq')
+    const isUndo = mod && !e.altKey && e.key.toLowerCase() === 'z' && !e.shiftKey
+    const isRedo = mod && !e.altKey && ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y')
+    if (isUndo || isRedo) {
+      const mf = inField?.querySelector('math-field') as MathfieldElement | null
+      // Inside an equation, MathLive undoes its own typing first.
+      if (mf && mf.value !== mf.dataset.enter) return
+      e.preventDefault()
+      e.stopPropagation()
+      this.lastUndoKey = performance.now()
+      if (isUndo) this.undo()
+      else this.redo()
+      return
+    }
+    if (!inField && !mod && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter')) this.beforeEdit()
+  }
+
+  private onBeforeInput = (e: InputEvent) => {
+    if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') {
+      // From inside an equation: MathLive handles it.
+      if ((e.target as HTMLElement).closest?.('.eq') || document.activeElement?.tagName === 'MATH-FIELD') return
+      e.preventDefault()
+      if (performance.now() - this.lastUndoKey < 50) return // already handled by our keydown
+      if (e.inputType === 'historyUndo') this.undo()
+      else this.redo()
+    }
   }
 
   private resetGoal = () => {
@@ -204,6 +310,10 @@ export class DocEditor {
     this.root.removeEventListener('keydown', this.onRootKey)
     this.root.removeEventListener('input', this.onRootInput)
     this.root.removeEventListener('pointerdown', this.resetGoal)
+    this.root.removeEventListener('keydown', this.onUndoKey, true)
+    this.root.removeEventListener('beforeinput', this.onBeforeInput)
+    this.observer.disconnect()
+    window.clearTimeout(this.snapshotTimer)
     document.removeEventListener('selectionchange', this.markSelected)
   }
 
@@ -226,7 +336,16 @@ export class DocEditor {
 
   // ---------- model <-> DOM ----------
 
+  /** Shows a new document and starts a fresh undo history. */
   load(blocks: Block[]) {
+    this.loadBlocks(blocks)
+    window.clearTimeout(this.snapshotTimer)
+    this.snapshotTimer = undefined
+    this.history = [this.serialize()]
+    this.historyIndex = 0
+  }
+
+  private loadBlocks(blocks: Block[]) {
     this.root.replaceChildren(
       ...blocks.map((b) => {
         const el = this.makeBlock(b.type)
@@ -287,6 +406,7 @@ export class DocEditor {
 
   /** Replaces a block element with one of another type, keeping its content and the caret. */
   private convertBlock(block: HTMLElement, type: Block['type'], stripPrefix = 0): HTMLElement {
+    this.beforeEdit()
     const el = this.makeBlock(type)
     if (stripPrefix && block.firstChild?.nodeType === Node.TEXT_NODE) {
       const first = block.firstChild as Text
@@ -350,11 +470,14 @@ export class DocEditor {
       if (mf.selectionIsCollapsed && mf.position > end) mf.position = end
     })
     mf.addEventListener('focusin', () => {
+      mf.dataset.enter = mf.value // Ctrl+Z goes to the document once the field is back to this
+      this.checkpoint() // typing inside the field is MathLive's undo; the document sees one step
       this.lastField = mf
       wrap.classList.add('focused')
     })
     mf.addEventListener('focusout', () => {
       wrap.classList.remove('focused')
+      this.scheduleSnapshot()
       if (mf.dataset.calc && mf.value !== mf.dataset.out) this.recompute()
     })
     mf.addEventListener('input', () => {
@@ -377,6 +500,7 @@ export class DocEditor {
    * (Alt+M), otherwise it goes inline at the caret (Alt+Shift+M).
    */
   insertEquation(latex = '', display = false): MathfieldElement {
+    this.checkpoint()
     const sel = window.getSelection()
     let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null
     const focusedEq = (document.activeElement as HTMLElement | null)?.closest?.('.eq')
@@ -519,6 +643,7 @@ export class DocEditor {
       this.exitField(wrap, 'after')
     } else if (e.key === 'Backspace' && inputOf(mf.value) === '') {
       e.preventDefault()
+      this.checkpoint()
       this.exitField(wrap, 'before')
       wrap.remove()
       this.refreshDisplayClasses()
