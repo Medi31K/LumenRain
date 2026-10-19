@@ -18,12 +18,15 @@ It has a paper-cutout theme in Day and Night, and exports to Obsidian Markdown.
 - **Result format.** Exact ⇄ ≈ cycles between exact, decimal and both. The number of significant digits is set in Settings.
 - **Obsidian export.** Inline maths becomes `$…$` and display maths becomes `$$…$$`. You can copy it, save it as `.md`, and import Markdown back.
 - **Paper theme in Day and Night.** The waves sway, the clouds drift and wind gusts pass by. The scenery pauses while you type and respects the OS "reduce motion" setting.
-- **Obsidian templates.** *Note ▾* creates a new note from a template, or applies one to the current note. **ROOT - NOTE** is built in.
-  - Fill in Properties (date, tags, status) the way you do in Obsidian.
-  - `{{Title}}` and `{{date}}` are filled in automatically.
-  - The export is 1:1 with your template: frontmatter, `---` lines and bullet lists.
-  - You can add your own templates or paste one copied straight from Obsidian.
-- **Markdown shortcuts while writing:** `# `, `## `, `### `, `- `, and `---` + Enter.
+- **Notes as tabs.** The pinned **+** at the top left of the page offers: new note, new note from a template, apply a template, and manage templates. Each note has its own tab.
+- **Note title** at the top, slightly bigger than Heading 1, like Obsidian's inline title. When you rename it, a heading that repeats the title follows along, for example `# {{Title}}` from a template.
+- **Obsidian template ROOT - NOTE** is built in, and you can add your own or paste one from Obsidian. The export is 1:1 with your template.
+- **Obsidian hotkeys**, customisable in ⚙ → Hotkeys. You can also import your `.obsidian/hotkeys.json` there.
+  - Alt+1–6: headings
+  - Ctrl+J: bullet list; Ctrl+K: numbered list
+  - Alt+M: equation on its own line; Alt+Shift+M: inline equation
+  - Ctrl+G: template; Ctrl+E: source mode (Markdown)
+- **Markdown while writing:** `# ` to `###### `, `- `, `1. `, and `---` becomes a line.
 - **English and Danish.** Danish uses a decimal comma (`2,5`).
 - Autosave to local storage.
 

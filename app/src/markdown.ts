@@ -2,7 +2,7 @@ import { unwrapResult } from './engine'
 
 export type Inline = { t: 'text'; s: string } | { t: 'eq'; latex: string }
 export interface Block {
-  type: 'h1' | 'h2' | 'h3' | 'p' | 'li' | 'hr'
+  type: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'li' | 'oli' | 'hr'
   inlines: Inline[]
   /** No blank line before this block in the Markdown (keeps templates byte-exact). */
   tight?: boolean
@@ -81,36 +81,31 @@ function inlineMarkdown(b: Block): string {
   return b.inlines.map((i) => (i.t === 'eq' ? `$${mathOf(i.latex)}$` : escapeText(i.s))).join('')
 }
 
-function blockMarkdown(b: Block): string {
+const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+const isList = (t: Block['type']) => t === 'li' || t === 'oli'
+
+function blockMarkdown(b: Block, number: number): string {
   if (b.type === 'hr') return '---'
   if (isDisplay(b)) {
     const eq = b.inlines.find((i) => i.t === 'eq') as { latex: string }
     return `$$\n${mathOf(eq.latex)}\n$$`
   }
   const body = inlineMarkdown(b)
-  switch (b.type) {
-    case 'h1':
-      return `# ${body}`
-    case 'h2':
-      return `## ${body}`
-    case 'h3':
-      return `### ${body}`
-    case 'li':
-      return `- ${body}`
-    default:
-      return body
-  }
+  if (HEADINGS.includes(b.type)) return `${'#'.repeat(Number(b.type[1]))} ${body}`
+  if (b.type === 'li') return `- ${body}`
+  if (b.type === 'oli') return `${number}. ${body}`
+  return body
 }
 
-const HEADING_OR_RULE = ['hr', 'h1', 'h2', 'h3']
+const HEADING_OR_RULE = ['hr', ...HEADINGS]
 
 /** Whether two blocks may sit on consecutive lines without changing their meaning. */
 function tightBetween(prev: Block, b: Block): boolean {
   if (isDisplay(b) || isDisplay(prev)) return false
   if (b.type === 'hr' && prev.type === 'p') return false // would turn the text into a heading
-  const safe = b.type === 'li' ? prev.type !== 'hr' || b.tight === true : HEADING_OR_RULE.includes(b.type) || HEADING_OR_RULE.includes(prev.type)
+  const safe = isList(b.type) ? prev.type !== 'hr' || b.tight === true : HEADING_OR_RULE.includes(b.type) || HEADING_OR_RULE.includes(prev.type)
   if (!safe) return false
-  return b.tight ?? (b.type === 'li' && (prev.type === 'li' || prev.type === 'p'))
+  return b.tight ?? (isList(b.type) && (isList(prev.type) || prev.type === 'p'))
 }
 
 /**
@@ -118,12 +113,15 @@ function tightBetween(prev: Block, b: Block): boolean {
  * display math `$$…$$`, and lists kept tight under the line that introduces them.
  */
 export function toMarkdown(blocks: Block[], props: Property[] | null = null): string {
-  let out = props ? `${propsToYaml(props)}\n` : ''
+  // A note may not *start* with "---" or Obsidian reads it as Properties.
+  let out = props ? `${propsToYaml(props)}\n` : blocks[0]?.type === 'hr' ? '\n' : ''
+  let number = 0
   blocks.forEach((b, i) => {
     const prev = blocks[i - 1]
     if (prev) out += tightBetween(prev, b) ? '\n' : '\n\n'
     else if (props && !b.tight) out += '\n'
-    out += blockMarkdown(b)
+    number = b.type === 'oli' ? (prev?.type === 'oli' ? number + 1 : 1) : 0
+    out += blockMarkdown(b, number)
   })
   return out.replace(/\n+$/, '')
 }
@@ -160,7 +158,8 @@ export function parseDocument(md: string): Doc {
   let props: Property[] | null = null
   if (lines[0]?.trim() === '---') {
     const end = lines.findIndex((l, i) => i > 0 && l.trim() === '---')
-    if (end > 0) {
+    const yamlish = (l: string) => /^\s*$|^[^\s:#][^:]*:(\s.*)?$|^\s+-(\s.*)?$/.test(l)
+    if (end > 0 && lines.slice(1, end).every(yamlish)) {
       props = parseYaml(lines.slice(1, end))
       start = end + 1
     }
@@ -203,7 +202,10 @@ export function parseDocument(md: string): Doc {
     } else if (/^#{1,6}\s/.test(trimmed)) {
       flush()
       const level = trimmed.match(/^#+/)![0].length
-      push({ type: level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3', inlines: parseInlines(trimmed.replace(/^#+\s*/, '')) })
+      push({ type: `h${level}` as Block['type'], inlines: parseInlines(trimmed.replace(/^#+\s*/, '')) })
+    } else if (/^\d+[.)](\s|$)/.test(trimmed)) {
+      flush()
+      push({ type: 'oli', inlines: parseInlines(trimmed.replace(/^\d+[.)]\s?/, '')) })
     } else if (/^[-*+](\s|$)/.test(trimmed)) {
       flush()
       push({ type: 'li', inlines: parseInlines(trimmed.replace(/^[-*+]\s?/, '')) })

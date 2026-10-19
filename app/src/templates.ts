@@ -13,11 +13,6 @@ export const ROOT_NOTE: Template = {
   // Built line by line so the "- " list stubs keep their trailing space.
   markdown: [
     '---',
-    'date:',
-    'tags:',
-    'status:',
-    '---',
-    '---',
     '',
     'External Sources',
     '- ',
@@ -33,6 +28,14 @@ export const ROOT_NOTE: Template = {
     '---',
     '',
   ].join('\n'),
+}
+
+/** The first built-in version (with date/tags/status Properties). */
+const ROOT_NOTE_V1 = ['---', 'date:', 'tags:', 'status:', '---', ROOT_NOTE.markdown].join('\n')
+
+/** Upgrades the built-in template if the user never edited it. */
+export function migrateTemplates(list: Template[]): Template[] {
+  return list.map((t) => (t.id === ROOT_NOTE.id && t.markdown === ROOT_NOTE_V1 ? ROOT_NOTE : t))
 }
 
 export const today = () => {

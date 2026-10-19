@@ -84,12 +84,17 @@ const SHADOW_STYLE = `
   :host(.has-error) .ML__content { text-decoration: underline wavy var(--lr-text-error); text-underline-offset: 6px; }
 `
 
+const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+
 function blockType(el: HTMLElement): Block['type'] {
   const tag = el.tagName.toLowerCase()
   if (tag === 'hr') return 'hr'
   if (el.classList.contains('li')) return 'li'
-  return tag === 'h1' || tag === 'h2' || tag === 'h3' ? tag : 'p'
+  if (el.classList.contains('oli')) return 'oli'
+  return HEADING_TAGS.includes(tag) ? (tag as Block['type']) : 'p'
 }
+
+const RULE = /^(-{3,}|\*{3,}|_{3,})$/
 
 /** Visible text of a block (ignores caret anchors). */
 const blockText = (el: Element) => (el.textContent ?? '').replace(/\u200B/g, '')
@@ -207,9 +212,9 @@ export class DocEditor {
   }
 
   private makeBlock(type: Block['type']): HTMLElement {
-    if (type === 'li') {
+    if (type === 'li' || type === 'oli') {
       const el = document.createElement('div')
-      el.className = 'li'
+      el.className = type
       return el
     }
     if (type === 'hr') {
@@ -298,10 +303,26 @@ export class DocEditor {
 
   // ---------- equations ----------
 
-  /** Inserts a new equation at the caret (Word: Alt+=). */
-  insertEquation(latex = ''): MathfieldElement {
+  /**
+   * Inserts a new equation: `display` puts it on its own line below the caret
+   * (Alt+M), otherwise it goes inline at the caret (Alt+Shift+M).
+   */
+  insertEquation(latex = '', display = false): MathfieldElement {
     const sel = window.getSelection()
     let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null
+    const focusedEq = (document.activeElement as HTMLElement | null)?.closest?.('.eq')
+    const anchor = focusedEq && this.root.contains(focusedEq) ? focusedEq : range && this.root.contains(range.startContainer) ? range.startContainer : null
+    if (display || focusedEq) {
+      const block = anchor ? this.blockOf(anchor) : null
+      const emptyHere = block && block.tagName === 'P' && blockText(block) === '' && !block.querySelector('.eq')
+      if (!emptyHere) {
+        const p = this.emptyParagraph()
+        if (block) block.after(p)
+        else this.root.append(p)
+        range = document.createRange()
+        range.setStart(p, 0)
+      }
+    }
     if (!range || !this.root.contains(range.startContainer)) {
       const p = this.emptyParagraph()
       this.root.append(p)
@@ -319,6 +340,32 @@ export class DocEditor {
     requestAnimationFrame(() => mf.focus())
     this.hooks.onChange()
     return mf
+  }
+
+  /** Turns the caret's block into `type`, or back into text if it already is one (Obsidian toggles). */
+  toggleBlock(type: Block['type']) {
+    const active = document.activeElement as HTMLElement | null
+    const sel = window.getSelection()
+    const node = active?.closest?.('.eq') ?? (sel?.focusNode && this.root.contains(sel.focusNode) ? sel.focusNode : null)
+    const block = node ? this.blockOf(node) : null
+    if (!block || block.tagName === 'HR') return
+    const el = this.convertBlock(block, blockType(block) === type ? 'p' : type)
+    // Put the caret at the end of the converted line.
+    const r = document.createRange()
+    r.selectNodeContents(el)
+    r.collapse(false)
+    this.root.focus()
+    sel?.removeAllRanges()
+    sel?.addRange(r)
+    this.afterStructureChange()
+  }
+
+  /** Keeps headings that repeat the note title in sync when the title is renamed. */
+  renameHeadings(from: string, to: string) {
+    if (!from.trim()) return
+    for (const h of Array.from(this.root.querySelectorAll(HEADING_TAGS.join(','))))
+      if (blockText(h).trim() === from.trim()) h.textContent = to
+    this.hooks.onChange()
   }
 
   /** Inserts LaTeX into the focused/last field, or a new equation. */
@@ -499,7 +546,8 @@ export class DocEditor {
 
   private onRootKey = (e: KeyboardEvent) => {
     const inField = (e.target as HTMLElement).closest?.('.eq')
-    if (e.altKey && (e.key === 'm' || e.key === 'M' || e.key === 'µ' || e.key === '=')) {
+    if (e.altKey && !e.shiftKey && e.key === '=') {
+      // Word's own shortcut also works (Alt+M is a customisable hotkey).
       e.preventDefault()
       this.insertEquation()
       return
@@ -510,14 +558,14 @@ export class DocEditor {
       if (block && this.root.contains(block)) {
         const type = blockType(block)
         const empty = blockText(block) === '' && !block.querySelector('.eq')
-        if (e.key === 'Enter' && type === 'li' && empty) {
+        if (e.key === 'Enter' && (type === 'li' || type === 'oli') && empty) {
           // Enter on an empty bullet ends the list (Obsidian/Word).
           e.preventDefault()
           this.convertBlock(block, 'p')
           this.afterStructureChange()
           return
         }
-        if (e.key === 'Enter' && type === 'p' && /^(-{3,}|\*{3,}|_{3,})$/.test(blockText(block).trim())) {
+        if (e.key === 'Enter' && type === 'p' && RULE.test(blockText(block).trim())) {
           // "---" + Enter draws a line.
           e.preventDefault()
           const hr = this.makeBlock('hr')
@@ -584,10 +632,20 @@ export class DocEditor {
     // Markdown-style shortcuts at the start of a paragraph: "# ", "## ", "### ", "- ".
     const sel = window.getSelection()
     const block = sel?.focusNode ? this.blockOf(sel.focusNode) : null
-    if (block && block.tagName === 'P' && block.firstChild?.nodeType === Node.TEXT_NODE) {
-      const m = (block.firstChild.textContent ?? '').match(/^(#{1,3}|[-*])[\s\u00A0]/)
+    if (block && block.tagName === 'P' && RULE.test(blockText(block)) && !block.querySelector('.eq')) {
+      // "---" becomes a line right away, like Obsidian's live preview.
+      const hr = this.makeBlock('hr')
+      const p = this.emptyParagraph()
+      block.replaceWith(hr)
+      hr.after(p)
+      const r = document.createRange()
+      r.setStart(p, 0)
+      sel!.removeAllRanges()
+      sel!.addRange(r)
+    } else if (block && block.tagName === 'P' && block.firstChild?.nodeType === Node.TEXT_NODE) {
+      const m = (block.firstChild.textContent ?? '').match(/^(#{1,6}|[-*]|\d+[.)])[\s\u00A0]/)
       if (m) {
-        const type = m[1] === '-' || m[1] === '*' ? 'li' : (['h1', 'h2', 'h3'] as const)[m[1].length - 1]
+        const type: Block['type'] = /^[-*]$/.test(m[1]) ? 'li' : /^\d/.test(m[1]) ? 'oli' : (`h${m[1].length}` as Block['type'])
         this.convertBlock(block, type, m[0].length)
       }
     }

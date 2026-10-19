@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { convertLatexToMarkup } from 'mathlive'
 import { Background } from './Background'
 import { DocEditor } from './editor'
 import type { EngineOptions, Lang, ResultMode, Variable } from './engine'
+import { commandFor, DEFAULT_HOTKEYS, formatHotkey, type Command, type Hotkeys } from './hotkeys'
 import { sampleDoc, strings } from './i18n'
-import { fromMarkdown, parseDocument, toMarkdown, type Block, type Doc, type Property } from './markdown'
-import { NotePanel, Properties } from './NotePanel'
-import { applyTemplate, ROOT_NOTE, titleOf, type Template } from './templates'
+import { parseDocument, toMarkdown, type Block, type Doc, type Property } from './markdown'
+import { HotkeysDialog, Properties, TabBar, TemplatesDialog, type NoteTab } from './NotePanel'
+import { applyTemplate, migrateTemplates, ROOT_NOTE, titleOf, type Template } from './templates'
 
 type ThemePref = 'day' | 'night' | 'system'
 
@@ -18,10 +19,18 @@ interface Settings {
   motion: boolean
   templates: Template[]
   defaultTemplate: string | null
+  hotkeys: Hotkeys
 }
 
 const SETTINGS_KEY = 'lumenrain.settings'
-const DOC_KEY = 'lumenrain.doc'
+const LEGACY_DOC_KEY = 'lumenrain.doc'
+const NOTES_KEY = 'lumenrain.notes'
+const noteKey = (id: string) => `lumenrain.note.${id}`
+
+interface NotesIndex {
+  tabs: NoteTab[]
+  active: string
+}
 
 function readJson<T>(key: string): T | null {
   try {
@@ -40,6 +49,16 @@ function writeJson(key: string, value: unknown) {
   }
 }
 
+function removeKey(key: string) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    /* ignore */
+  }
+}
+
+const newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+
 const defaultSettings: Settings = {
   theme: 'system',
   lang: navigator.language.startsWith('da') ? 'da' : 'en',
@@ -48,6 +67,17 @@ const defaultSettings: Settings = {
   motion: true,
   templates: [ROOT_NOTE],
   defaultTemplate: null,
+  hotkeys: DEFAULT_HOTKEYS,
+}
+
+function loadSettings(): Settings {
+  const saved = readJson<Partial<Settings>>(SETTINGS_KEY) ?? {}
+  return {
+    ...defaultSettings,
+    ...saved,
+    templates: migrateTemplates(saved.templates ?? defaultSettings.templates),
+    hotkeys: { ...DEFAULT_HOTKEYS, ...saved.hotkeys },
+  }
 }
 
 const SYMBOLS = ['\\alpha', '\\beta', '\\gamma', '\\Delta', '\\theta', '\\lambda', '\\mu', '\\pi', '\\rho', '\\sigma', '\\omega', '\\infty',
@@ -58,19 +88,27 @@ function Tex({ latex }: { latex: string }) {
   return <span className="math" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
+type Panel = null | 'settings' | 'symbols' | 'export' | 'templates' | 'hotkeys'
+
 export default function App() {
-  const [settings, setSettings] = useState<Settings>(() => ({ ...defaultSettings, ...readJson<Settings>(SETTINGS_KEY) }))
+  const [settings, setSettings] = useState<Settings>(loadSettings)
   const [systemDark, setSystemDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
   const [variables, setVariables] = useState<Variable[]>([])
-  const [panel, setPanel] = useState<null | 'settings' | 'symbols' | 'export' | 'note'>(null)
+  const [panel, setPanel] = useState<Panel>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [props, setPropsState] = useState<Property[] | null>(null)
-  const propsRef = useRef<Property[] | null>(null)
+  const [tabs, setTabs] = useState<NoteTab[]>([])
+  const [activeId, setActiveId] = useState('')
+  const [source, setSource] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
   const [copied, setCopied] = useState(false)
   const [importText, setImportText] = useState('')
   const [markdown, setMarkdown] = useState('')
   const pageRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLInputElement>(null)
   const editorRef = useRef<DocEditor | null>(null)
+  const propsRef = useRef<Property[] | null>(null)
+  const activeRef = useRef('')
   const typingTimer = useRef<number | undefined>(undefined)
   const t = strings[settings.lang]
   const langRef = useRef(settings.lang)
@@ -81,6 +119,7 @@ export default function App() {
     () => ({ mode: settings.mode, digits: settings.digits, lang: settings.lang }),
     [settings.mode, settings.digits, settings.lang],
   )
+  const activeTitle = tabs.find((x) => x.id === activeId)?.title ?? ''
 
   useEffect(() => {
     const mq = matchMedia('(prefers-color-scheme: dark)')
@@ -95,14 +134,46 @@ export default function App() {
     writeJson(SETTINGS_KEY, settings)
   }, [theme, settings])
 
+  useEffect(() => {
+    if (activeId) writeJson(NOTES_KEY, { tabs, active: activeId } satisfies NotesIndex)
+  }, [tabs, activeId])
+
   const update = (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch }))
+
+  // ---------- notes ----------
+
+  const persist = () => {
+    if (editorRef.current && activeRef.current) writeJson(noteKey(activeRef.current), { props: propsRef.current, blocks: editorRef.current.save() })
+  }
+  const showDoc = (doc: Doc, calculate = false) => {
+    const ed = editorRef.current
+    if (!ed) return
+    propsRef.current = doc.props
+    setPropsState(doc.props)
+    ed.load(doc.blocks.length ? doc.blocks : [{ type: 'p', inlines: [] }])
+    if (calculate) ed.calculateAll()
+  }
+  const currentDoc = (): Doc => ({ props: propsRef.current, blocks: editorRef.current?.save() ?? [] })
+  const noteMarkdown = () => {
+    const d = currentDoc()
+    return toMarkdown(d.blocks, d.props)
+  }
+  const openNote = (id: string) => {
+    persist()
+    activeRef.current = id
+    setActiveId(id)
+    setSource(null)
+    showDoc(readJson<Doc>(noteKey(id)) ?? { props: null, blocks: [] })
+  }
 
   // Create the editor once; it owns the page DOM from here on.
   useEffect(() => {
     const ed = new DocEditor(
       pageRef.current!,
       {
-        onChange: () => writeJson(DOC_KEY, { props: propsRef.current, blocks: ed.save() }),
+        onChange: () => {
+          if (activeRef.current) writeJson(noteKey(activeRef.current), { props: propsRef.current, blocks: ed.save() })
+        },
         onVariables: setVariables,
         onTyping: () => {
           setTyping(true)
@@ -114,15 +185,33 @@ export default function App() {
       engineOpts,
     )
     editorRef.current = ed
-    const saved = readJson<Doc | Block[]>(DOC_KEY)
-    const doc: Doc | null = Array.isArray(saved) ? { props: null, blocks: saved } : saved
-    if (doc && doc.blocks?.length) {
-      propsRef.current = doc.props
-      setPropsState(doc.props)
-      ed.load(doc.blocks)
+
+    let index = readJson<NotesIndex>(NOTES_KEY)
+    if (!index || !index.tabs.length) {
+      // First run (or upgrade from the single-note version).
+      const legacy = readJson<Doc | Block[]>(LEGACY_DOC_KEY)
+      const id = newId()
+      let doc: Doc
+      let fresh = false
+      if (legacy && (Array.isArray(legacy) ? legacy.length : legacy.blocks?.length)) {
+        doc = Array.isArray(legacy) ? { props: null, blocks: legacy } : legacy
+      } else {
+        doc = parseDocument(sampleDoc[engineOpts.lang])
+        fresh = true
+      }
+      writeJson(noteKey(id), doc)
+      removeKey(LEGACY_DOC_KEY)
+      index = { tabs: [{ id, title: titleOf(doc.blocks) || strings[engineOpts.lang].untitled }], active: id }
+      setTabs(index.tabs)
+      activeRef.current = id
+      setActiveId(id)
+      showDoc(doc, fresh)
     } else {
-      ed.load(fromMarkdown(sampleDoc[engineOpts.lang]))
-      ed.calculateAll()
+      setTabs(index.tabs)
+      const active = index.tabs.some((x) => x.id === index!.active) ? index.active : index.tabs[0].id
+      activeRef.current = active
+      setActiveId(active)
+      showDoc(readJson<Doc>(noteKey(active)) ?? { props: null, blocks: [] })
     }
     return () => ed.destroy()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,51 +221,86 @@ export default function App() {
     editorRef.current?.setOptions(engineOpts)
   }, [engineOpts])
 
-  const persist = () => {
-    if (editorRef.current) writeJson(DOC_KEY, { props: propsRef.current, blocks: editorRef.current.save() })
-  }
   const setProps = (p: Property[] | null) => {
     propsRef.current = p
     setPropsState(p)
     persist()
   }
-  const currentDoc = (): Doc => ({ props: propsRef.current, blocks: editorRef.current?.save() ?? [] })
-  const noteMarkdown = () => {
-    const d = currentDoc()
-    return toMarkdown(d.blocks, d.props)
-  }
-  const loadDoc = (doc: Doc) => {
-    if (!editorRef.current) return
-    propsRef.current = doc.props
-    setPropsState(doc.props)
-    editorRef.current.load(doc.blocks)
-    editorRef.current.calculateAll()
-    persist()
-  }
+
   const templateById = (id: string | null) => settings.templates.find((x) => x.id === id) ?? null
 
-  const newNote = (templateId: string | null, title: string) => {
+  const newNote = (templateId: string | null) => {
+    persist()
+    const id = newId()
+    const title = t.untitled
     const tpl = templateById(templateId)
-    const empty: Doc = { props: null, blocks: [{ type: 'h1', inlines: [{ t: 'text', s: title }] }, { type: 'p', inlines: [] }] }
-    loadDoc(tpl ? applyTemplate(tpl, { props: null, blocks: [] }, title) : empty)
-    setPanel(null)
-  }
-  const applyToCurrent = (templateId: string, title: string) => {
-    const tpl = templateById(templateId)
-    if (tpl) loadDoc(applyTemplate(tpl, currentDoc(), title))
-    setPanel(null)
+    const doc: Doc = tpl ? applyTemplate(tpl, { props: null, blocks: [] }, title) : { props: null, blocks: [{ type: 'p', inlines: [] }] }
+    writeJson(noteKey(id), doc)
+    const after = activeRef.current
+    setTabs((list) => {
+      const next = [...list]
+      next.splice(next.findIndex((x) => x.id === after) + 1, 0, { id, title })
+      return next
+    })
+    activeRef.current = id
+    setActiveId(id)
+    setSource(null)
+    showDoc(doc, true)
+    setMenuOpen(false)
+    requestAnimationFrame(() => titleRef.current?.select())
   }
 
-  const openExport = useCallback(() => {
-    if (!editorRef.current) return
+  const closeNote = (id: string) => {
+    removeKey(noteKey(id))
+    const rest = tabs.filter((x) => x.id !== id)
+    setTabs(rest)
+    if (id !== activeRef.current) return
+    if (rest.length) {
+      const at = Math.max(0, tabs.findIndex((x) => x.id === id) - 1)
+      activeRef.current = ''
+      openNote(rest[Math.min(at, rest.length - 1)].id)
+    } else {
+      activeRef.current = ''
+      newNote(null)
+    }
+  }
+
+  const applyToCurrent = (templateId: string) => {
+    const tpl = templateById(templateId)
+    if (tpl) {
+      showDoc(applyTemplate(tpl, currentDoc(), activeTitle || t.untitled), true)
+      persist()
+    }
+    setMenuOpen(false)
+  }
+
+  const renameNote = (title: string) => {
+    editorRef.current?.renameHeadings(activeTitle, title)
+    setTabs((list) => list.map((x) => (x.id === activeId ? { ...x, title } : x)))
+  }
+
+  // ---------- source mode ----------
+
+  const toggleSource = () => {
+    if (source === null) {
+      setSource(noteMarkdown())
+    } else {
+      showDoc(parseDocument(source), true)
+      persist()
+      setSource(null)
+    }
+  }
+
+  // ---------- export / import ----------
+
+  const openExport = () => {
     setMarkdown(noteMarkdown())
     setCopied(false)
     setPanel('export')
-  }, [])
+  }
 
   const copyMarkdown = async () => {
-    const md = editorRef.current ? noteMarkdown() : markdown
-    await navigator.clipboard.writeText(md)
+    await navigator.clipboard.writeText(noteMarkdown())
     setCopied(true)
   }
 
@@ -184,35 +308,84 @@ export default function App() {
     const blob = new Blob([markdown], { type: 'text/markdown' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    const title = titleOf(currentDoc().blocks) || 'Lumenrain'
-    a.download = `${title.replace(/[\\/:*?"<>|]/g, '')}.md`
+    a.download = `${(activeTitle || 'Lumenrain').replace(/[\\/:*?"<>|]/g, '')}.md`
     a.click()
     URL.revokeObjectURL(a.href)
   }
 
   const doImport = () => {
-    if (!importText.trim() || !editorRef.current) return
-    loadDoc(parseDocument(importText))
+    if (!importText.trim()) return
+    showDoc(parseDocument(importText), true)
+    persist()
     setImportText('')
     setPanel(null)
   }
 
-  // Global shortcut: Ctrl/Cmd+Shift+C copies the document as Markdown.
+  // ---------- hotkeys ----------
+
+  const run = (cmd: Command) => {
+    const ed = editorRef.current
+    const inSource = source !== null
+    const block = (type: Block['type']) => !inSource && ed?.toggleBlock(type)
+    switch (cmd) {
+      case 'heading1':
+      case 'heading2':
+      case 'heading3':
+      case 'heading4':
+      case 'heading5':
+      case 'heading6':
+        return block(`h${cmd.slice(-1)}` as Block['type'])
+      case 'bulletList':
+        return block('li')
+      case 'numberedList':
+        return block('oli')
+      case 'equation':
+        return !inSource && ed?.insertEquation('', true)
+      case 'inlineEquation':
+        return !inSource && ed?.insertEquation('', false)
+      case 'insertTemplate':
+        return setMenuOpen(true)
+      case 'toggleSource':
+        return toggleSource()
+      case 'newNote':
+        return newNote(settings.defaultTemplate)
+      case 'copyMarkdown':
+        return navigator.clipboard.writeText(noteMarkdown())
+    }
+  }
+  const runRef = useRef(run)
+  runRef.current = run
+  const hotkeysRef = useRef(settings.hotkeys)
+  hotkeysRef.current = settings.hotkeys
+  const panelRef = useRef(panel)
+  panelRef.current = panel
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault()
-        if (editorRef.current) navigator.clipboard.writeText(noteMarkdown())
-      } else if (e.key === 'Escape') setPanel(null)
+      if (panelRef.current === 'hotkeys') return // recording new shortcuts
+      if (e.key === 'Escape') {
+        setPanel(null)
+        setMenuOpen(false)
+        return
+      }
+      const cmd = commandFor(hotkeysRef.current, e)
+      if (!cmd) return
+      const target = e.target as HTMLElement
+      const inForm = target.closest?.('input, select, textarea:not(.source)') !== null
+      if (inForm && cmd !== 'toggleSource' && cmd !== 'newNote') return
+      e.preventDefault()
+      e.stopPropagation()
+      runRef.current(cmd)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true) // capture: before MathLive sees it
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   const insert = (latex: string) => editorRef.current?.insertIntoField(latex)
   const keepFocus = (e: React.MouseEvent) => e.preventDefault()
   const nextMode: Record<ResultMode, ResultMode> = { auto: 'exact', exact: 'decimal', decimal: 'auto' }
   const modeLabel = { auto: t.modeAuto, exact: t.modeExact, decimal: t.modeDecimal }[settings.mode]
+  const hk = (cmd: Command) => settings.hotkeys[cmd]?.[0] && formatHotkey(settings.hotkeys[cmd][0])
 
   return (
     <div className={`app ${settings.motion ? 'motion' : ''} ${typing ? 'typing' : ''}`}>
@@ -220,16 +393,13 @@ export default function App() {
 
       <header className="toolbar" onMouseDown={keepFocus}>
         <span className="brand">Lumenrain</span>
-        <button className="btn" onClick={() => setPanel('note')} title={t.noteHint}>
-          {t.note} ▾
-        </button>
-        <button className="btn primary" onClick={() => editorRef.current?.insertEquation()} title="Alt+M">
+        <button className="btn primary" onClick={() => editorRef.current?.insertEquation('', true)} title={hk('equation')}>
           {t.newEquation}
         </button>
         <button className="btn" onClick={() => insert('\\frac{#@}{#?}')} title="/">
           {t.fraction}
         </button>
-        <button className="btn" onClick={() => insert('\\sqrt{#@}')} title="sqrt">
+        <button className="btn" onClick={() => insert('\\sqrt{#@}')} title="sqrt(">
           {t.root}
         </button>
         <button className="btn" onClick={() => insert('#@^{#?}')} title="^">
@@ -256,6 +426,9 @@ export default function App() {
           {t.obsidian} <span aria-hidden>⧉</span>
         </button>
         <span className="grow" />
+        <button className={`btn ghost ${source !== null ? 'on' : ''}`} onClick={toggleSource} title={`${t.sourceMode} (${hk('toggleSource') ?? ''})`}>
+          {'</>'}
+        </button>
         <div className="segmented" role="group" aria-label={t.language}>
           {(['en', 'da'] as Lang[]).map((l) => (
             <button key={l} className={settings.lang === l ? 'on' : ''} onClick={() => update({ lang: l })}>
@@ -298,6 +471,12 @@ export default function App() {
                 <input type="checkbox" checked={settings.motion} onChange={(e) => update({ motion: e.target.checked })} />
                 {t.motion}
               </label>
+              <button className="btn" onClick={() => setPanel('hotkeys')}>
+                {t.hotkeys}…
+              </button>
+              <button className="btn" onClick={() => setPanel('templates')}>
+                {t.manageTemplates}…
+              </button>
             </div>
           )}
         </div>
@@ -317,23 +496,64 @@ export default function App() {
       </aside>
 
       <main className="sheet-wrap">
+        <TabBar
+          t={t}
+          tabs={tabs}
+          activeId={activeId}
+          templates={settings.templates}
+          defaultTemplate={settings.defaultTemplate}
+          menuOpen={menuOpen}
+          setMenuOpen={setMenuOpen}
+          onSelect={openNote}
+          onClose={closeNote}
+          onNew={newNote}
+          onApply={applyToCurrent}
+          onManageTemplates={() => {
+            setMenuOpen(false)
+            setPanel('templates')
+          }}
+        />
         <article className="sheet">
-          {props && <Properties props={props} onChange={setProps} t={t} />}
-          <div ref={pageRef} className="page" />
+          <input
+            ref={titleRef}
+            className="note-title"
+            value={activeTitle}
+            placeholder={t.untitled}
+            aria-label={t.noteTitle}
+            onChange={(e) => renameNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                e.preventDefault()
+                pageRef.current?.focus()
+              }
+            }}
+          />
+          {props && source === null && <Properties props={props} onChange={setProps} t={t} />}
+          {source !== null && (
+            <textarea className="source" value={source} onChange={(e) => setSource(e.target.value)} spellCheck={false} aria-label={t.sourceMode} autoFocus />
+          )}
+          <div ref={pageRef} className="page" hidden={source !== null} />
           <p className="hint">{t.shortcuts}</p>
         </article>
       </main>
 
-      {panel === 'note' && (
-        <NotePanel
+      {panel === 'templates' && (
+        <TemplatesDialog
           t={t}
           templates={settings.templates}
           defaultTemplate={settings.defaultTemplate}
-          currentTitle={titleOf(currentDoc().blocks)}
-          onNew={newNote}
-          onApply={applyToCurrent}
           onTemplatesChange={(templates) => update({ templates })}
           onDefaultChange={(defaultTemplate) => update({ defaultTemplate })}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'hotkeys' && (
+        <HotkeysDialog
+          t={t}
+          hotkeys={settings.hotkeys}
+          onChange={(hotkeys) => update({ hotkeys })}
+          onReset={() => update({ hotkeys: DEFAULT_HOTKEYS })}
           onClose={() => setPanel(null)}
         />
       )}
@@ -342,7 +562,6 @@ export default function App() {
         <div className="dialog-backdrop" onMouseDown={() => setPanel(null)}>
           <div className="dialog" role="dialog" aria-label={t.exportTitle} onMouseDown={(e) => e.stopPropagation()}>
             <h2>{t.exportTitle}</h2>
-            <p className="muted">{t.exportHint}</p>
             <pre className="md">{markdown}</pre>
             <div className="row">
               <button className="btn primary" onClick={copyMarkdown}>
@@ -357,7 +576,6 @@ export default function App() {
               </button>
             </div>
             <h3>{t.importMd}</h3>
-            <p className="muted">{t.importHint}</p>
             <textarea value={importText} onChange={(e) => setImportText(e.target.value)} rows={4} placeholder="$$E=mc^2$$" />
             <div className="row">
               <button className="btn" onClick={doImport} disabled={!importText.trim()}>

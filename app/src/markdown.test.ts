@@ -28,18 +28,22 @@ describe('fromMarkdown', () => {
 })
 
 import { parseDocument, toMarkdown as toMd } from './markdown'
-import { applyTemplate, ROOT_NOTE, today } from './templates'
+import { applyTemplate, ROOT_NOTE } from './templates'
 
 describe('Obsidian notes', () => {
   it('round-trips the ROOT - NOTE template exactly', () => {
     const doc = parseDocument(ROOT_NOTE.markdown)
-    expect(doc.props).toEqual([
-      { key: 'date', value: '' },
-      { key: 'tags', value: '' },
-      { key: 'status', value: '' },
-    ])
+    expect(doc.props).toBeNull() // a leading --- line is not Properties
     expect(doc.blocks.map((b) => b.type)).toEqual(['hr', 'p', 'li', 'p', 'li', 'hr', 'h1', 'p', 'li', 'hr'])
-    expect(toMd(doc.blocks, doc.props) + '\n').toBe(ROOT_NOTE.markdown)
+    // Leading blank line keeps Obsidian from reading the first --- as Properties.
+    expect(toMd(doc.blocks, doc.props) + '\n').toBe('\n' + ROOT_NOTE.markdown)
+  })
+
+  it('handles numbered lists and deep headings', () => {
+    const md = '#### Deep\n\n1. one\n2. two\n3. three'
+    const doc = parseDocument(md)
+    expect(doc.blocks.map((b) => b.type)).toEqual(['h4', 'oli', 'oli', 'oli'])
+    expect(toMd(doc.blocks)).toBe(md)
   })
 
   it('writes list properties the way Obsidian does', () => {
@@ -55,7 +59,7 @@ describe('Obsidian notes', () => {
   it('applies the template around existing content', () => {
     const current = parseDocument('# Kinetic energy\n\nSome text $m=2$\n\n$$\nE=mc^2\n$$')
     const doc = applyTemplate(ROOT_NOTE, current, 'Kinetic energy')
-    expect(doc.props?.[0]).toEqual({ key: 'date', value: today() })
+    expect(doc.props).toBeNull()
     const md = toMd(doc.blocks, doc.props)
     expect(md).toContain('---\n# Kinetic energy\n\nTerms & Keywords:\n- \n---\n\nSome text $m=2$\n\n$$\nE=mc^2\n$$')
     expect(md.match(/^# /gm)?.length).toBe(1)
