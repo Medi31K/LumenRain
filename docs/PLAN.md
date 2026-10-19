@@ -1,4 +1,4 @@
-# Lommeregner – plan (v1)
+# Lumenrain – plan (v1)
 
 Figma (low-fi): https://www.figma.com/design/5wj8aGzwvICBvt7NuCsowP
 
@@ -12,10 +12,13 @@ En selvstændig desktop-lommeregner (Windows/macOS), hvor man skriver matematik 
 - Autoforslag-popup (Tab/Enter). Piletaster navigerer i brøker og rødder.
 - Variable (`m = 2,5`), som genbruges i senere linjer. Historik i sidepanelet.
 - Eksakt ⇄ decimal, valg af antal decimaler, Rad/Deg, dansk decimalkomma.
-- Kopiér som tekst / LaTeX / Word-ligning (MathML).
+- Ligningsløsning (CAS): løs, reducér, faktorisér. `løs(x^2-4=0)` giver `x = −2 ∨ x = 2`.
+- **Obsidian/Markdown-eksport:** Hele dokumentet kopieres 1:1 til Markdown. Brødtekst forbliver tekst, et ligningsfelt inde i en linje bliver til `$…$`, og et felt på sin egen linje bliver til `$$…$$`. Indholdet er LaTeX, som Obsidian kan læse (MathJax).
+  - Eksempel: `$$E_{kin}=\frac{1}{2}\cdot m\cdot v^2=180\text{ J}$$`
+  - Ved import (indsæt Markdown) parses `$`/`$$` tilbage til ligningsfelter.
 - Tema: Glas lys, Glas mørk og Følg system. Accentfarve og blur-styrke kan vælges.
 
-Udenfor v1: CAS/ligningsløsning, grafer, enheder/konstanter (kandidater til v2).
+Udenfor v1: grafer, enheder/konstanter (kandidater til v2).
 
 ## Teknologi (forslag)
 | Del | Valg | Hvorfor |
@@ -24,6 +27,7 @@ Udenfor v1: CAS/ligningsløsning, grafer, enheder/konstanter (kandidater til v2)
 | UI | React + TypeScript | |
 | 2D-editor | MathLive | WordMat-agtig indtastning, LaTeX/MathML-eksport |
 | Beregning | math.js (BigNumber + Fraction) | Eksakte brøker, ingen 0,1+0,2-fejl |
+| CAS | Nerdamer eller SymPy via Pyodide (afgøres i prototype) | Symbolsk ligningsløsning |
 | Gem | Lokale .lmr-filer (JSON) + autosave | |
 
 ## Faser
@@ -39,3 +43,8 @@ Udenfor v1: CAS/ligningsløsning, grafer, enheder/konstanter (kandidater til v2)
 2. Live 2D-input + autoforslag
 3. Resultat-handlinger
 4. Indstillinger & tema
+
+## Tema-kandidater (Figma-side "Temaer")
+- A · Aurora Night: mørk, med nordlys-orbs i teal, violet og rose bag frostet glas
+- B · Liquid Daylight: lyst perlemor-glas (Liquid Glass-inspireret) med azur-accent
+- C · Rosé Rain: skumring i rosé og guld (Rosé Pine-inspireret)
