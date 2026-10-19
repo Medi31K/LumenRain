@@ -61,16 +61,26 @@ function buildUp(mf: MathfieldElement, key: string): boolean {
   return false
 }
 
-/** Removes a shown answer so typing edits the input, keeping the caret where it was. */
-function hideResult(mf: MathfieldElement) {
-  if (!mf.value.includes(RESULT_CLASS)) return
-  const pos = mf.position
-  mf.value = inputOf(mf.value)
-  mf.position = Math.min(pos, mf.lastOffset)
+/** Offset where the user's input ends; anything after it is the read-only answer. */
+function inputEnd(mf: MathfieldElement): number {
+  const tail = mf.value.includes(RESULT_CLASS) ? Number(mf.dataset.tail ?? 0) : 0
+  return mf.lastOffset - tail
+}
+
+/** Screen position of the caret inside a math field. */
+function fieldCaretRect(mf: MathfieldElement): DOMRect {
+  const caret = mf.shadowRoot?.querySelector('.ML__caret, .ML__text-caret, .ML__latex-caret') as HTMLElement | null
+  return caret?.getBoundingClientRect() ?? mf.getBoundingClientRect()
+}
+
+function setDecimalSeparator(lang: string) {
+  const sep = lang === 'da' ? ',' : '.'
+  if (MathfieldElement.decimalSeparator !== sep) MathfieldElement.decimalSeparator = sep
 }
 
 const SHADOW_STYLE = `
-  .${RESULT_CLASS} { color: var(--lr-text-result); }
+  .${RESULT_CLASS} { color: var(--lr-text-result); transition: opacity .15s; }
+  :host(.stale) .${RESULT_CLASS} { opacity: .35; }
   :host(.has-error) .ML__content { text-decoration: underline wavy var(--lr-text-error); text-underline-offset: 6px; }
 `
 
@@ -86,28 +96,36 @@ export class DocEditor {
   private hooks: EditorHooks
   private opts: EngineOptions
   lastField: MathfieldElement | null = null
+  /** Horizontal "goal column" kept across consecutive ↑/↓, like Word. */
+  private goalX: number | null = null
 
   constructor(root: HTMLElement, hooks: EditorHooks, opts: EngineOptions) {
     this.root = root
     this.hooks = hooks
     this.opts = opts
-    MathfieldElement.decimalSeparator = opts.lang === 'da' ? ',' : '.'
+    setDecimalSeparator(opts.lang)
     root.contentEditable = 'true'
     root.spellcheck = false
     document.execCommand('defaultParagraphSeparator', false, 'p')
     root.addEventListener('keydown', this.onRootKey)
     root.addEventListener('input', this.onRootInput)
+    root.addEventListener('pointerdown', this.resetGoal)
+  }
+
+  private resetGoal = () => {
+    this.goalX = null
   }
 
   destroy() {
     this.root.removeEventListener('keydown', this.onRootKey)
     this.root.removeEventListener('input', this.onRootInput)
+    this.root.removeEventListener('pointerdown', this.resetGoal)
   }
 
   setOptions(opts: EngineOptions) {
     const langChanged = opts.lang !== this.opts.lang
     this.opts = opts
-    MathfieldElement.decimalSeparator = opts.lang === 'da' ? ',' : '.'
+    setDecimalSeparator(opts.lang)
     if (langChanged) {
       // Danish uses a decimal comma: 2.5 ⇄ 2{,}5 in every field.
       for (const mf of Array.from(this.root.querySelectorAll('math-field')) as MathfieldElement[]) {
@@ -190,19 +208,25 @@ export class DocEditor {
     mf.addEventListener('keydown', (e) => this.onFieldKey(e, mf, wrap), { capture: true })
     mf.addEventListener('move-out', (e) => {
       e.preventDefault()
-      this.exitField(wrap, (e as CustomEvent).detail.direction === 'backward' ? 'before' : 'after')
+      const dir = (e as CustomEvent).detail.direction as string
+      if (dir === 'upward' || dir === 'downward') this.moveVertical(fieldCaretRect(mf), dir === 'upward' ? -1 : 1)
+      else this.exitField(wrap, dir === 'backward' ? 'before' : 'after')
+    })
+    // The answer is a read-only tail: keep the caret inside the input part.
+    mf.addEventListener('selection-change', () => {
+      const end = inputEnd(mf)
+      if (mf.selectionIsCollapsed && mf.position > end) mf.position = end
     })
     mf.addEventListener('focusin', () => {
       this.lastField = mf
       wrap.classList.add('focused')
-      // Edit the input only; the answer comes back on Enter or when leaving.
-      hideResult(mf)
     })
     mf.addEventListener('focusout', () => {
       wrap.classList.remove('focused')
       if (mf.dataset.calc && mf.value !== mf.dataset.out) this.recompute()
     })
     mf.addEventListener('input', () => {
+      if (mf.value !== mf.dataset.out && mf.value.includes(RESULT_CLASS)) mf.classList.add('stale')
       this.hooks.onTyping()
       this.hooks.onChange()
     })
@@ -257,8 +281,16 @@ export class DocEditor {
       if (!mf.dataset.calc) return
       const o = outcomes[i]
       const value = o.result ? `${inputs[i]}\\class{${RESULT_CLASS}}{${o.result}}` : inputs[i]
-      if (mf.value !== value) mf.value = value
+      if (mf.value !== value || (o.result && !mf.dataset.tail)) {
+        const pos = mf.position
+        mf.value = inputs[i]
+        const end = mf.lastOffset
+        mf.value = value
+        mf.dataset.tail = String(mf.lastOffset - end) // length of the answer, in caret offsets
+        mf.position = Math.min(pos, inputEnd(mf))
+      }
       mf.dataset.out = value
+      mf.classList.remove('stale')
       mf.classList.toggle('has-error', o.kind === 'error')
       mf.title = o.kind === 'error' ? this.hooks.errorText(o) : ''
     })
@@ -273,7 +305,20 @@ export class DocEditor {
   }
 
   private onFieldKey(e: KeyboardEvent, mf: MathfieldElement, wrap: HTMLElement) {
-    if ((e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.metaKey) hideResult(mf)
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') this.goalX = null
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+    if (plain && e.key === 'ArrowRight' && mf.selectionIsCollapsed && mf.position >= inputEnd(mf)) {
+      // Step over the answer straight out of the equation.
+      e.preventDefault()
+      e.stopPropagation()
+      this.exitField(wrap, 'after')
+      return
+    }
+    if (plain && e.key === 'Delete' && mf.position >= inputEnd(mf)) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && (buildUp(mf, e.key) || e.key === ' ')) {
       // Space only builds up (like Word); it never inserts anything itself.
       e.preventDefault()
@@ -287,12 +332,12 @@ export class DocEditor {
       } else {
         mf.dataset.calc = '1'
         this.recompute()
-        mf.position = mf.lastOffset
+        mf.position = inputEnd(mf)
       }
     } else if (e.key === 'Escape') {
       e.preventDefault()
       this.exitField(wrap, 'after')
-    } else if (e.key === 'Backspace' && mf.value === '') {
+    } else if (e.key === 'Backspace' && inputOf(mf.value) === '') {
       e.preventDefault()
       this.exitField(wrap, 'before')
       wrap.remove()
@@ -315,7 +360,7 @@ export class DocEditor {
       let text: Text
       if (sib && sib.nodeType === Node.TEXT_NODE) text = sib as Text
       else {
-        text = document.createTextNode('​')
+        text = document.createTextNode('\u200B')
         if (where === 'after') wrap.after(text)
         else wrap.before(text)
       }
@@ -325,6 +370,66 @@ export class DocEditor {
     this.root.focus()
     sel.removeAllRanges()
     sel.addRange(range)
+  }
+
+  // ---------- vertical caret movement ----------
+
+  /** Puts the caret into an equation at the point closest to (x, y). */
+  private focusFieldAt(mf: MathfieldElement, x: number, y: number) {
+    mf.focus()
+    const r = mf.getBoundingClientRect()
+    const offset = mf.getOffsetFromPoint(Math.min(Math.max(x, r.left + 1), r.right - 1), Math.min(Math.max(y, r.top + 1), r.bottom - 1))
+    mf.position = Math.min(offset, inputEnd(mf))
+  }
+
+  /**
+   * Moves the caret one visual line up (dir = -1) or down (dir = 1) from `from`,
+   * landing in text or inside an equation at the same horizontal position.
+   */
+  moveVertical(from: DOMRect, dir: -1 | 1) {
+    const x = (this.goalX ??= from.left)
+    const rootRect = this.root.getBoundingClientRect()
+    const startY = dir < 0 ? from.top : from.bottom
+    for (let step = 1; step <= 40; step++) {
+      const y = startY + dir * step * 4
+      if (y < rootRect.top || y > rootRect.bottom) return
+      const hit = document.elementFromPoint(Math.max(x, rootRect.left + 1), y) as HTMLElement | null
+      if (!hit || !this.root.contains(hit) || hit === this.root) continue
+      const eq = hit.closest('.eq') as HTMLElement | null
+      const block = this.blockOf(hit)
+      const displayEq = block?.classList.contains('display') ? (block.querySelector('.eq') as HTMLElement | null) : null
+      const target = eq ?? displayEq
+      if (target) {
+        if (target.contains(document.activeElement)) continue // still inside the equation we're leaving
+        this.focusFieldAt(target.querySelector('math-field') as MathfieldElement, x, y)
+        return
+      }
+      const range = document.caretRangeFromPoint?.(Math.max(x, rootRect.left + 1), y)
+      if (!range || !this.root.contains(range.startContainer)) continue
+      // Only accept a caret that really sits on another line.
+      const r = range.getClientRects()[0] ?? (range.startContainer as Element).getBoundingClientRect?.()
+      if (r && (dir > 0 ? r.top < from.bottom - 2 : r.bottom > from.top + 2)) continue
+      const sel = window.getSelection()!
+      this.root.focus({ preventScroll: true })
+      sel.removeAllRanges()
+      sel.addRange(range)
+      return
+    }
+  }
+
+  /** Caret rectangle in the text (falls back to the block for empty lines). */
+  private textCaretRect(): DOMRect | null {
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount) return null
+    const range = sel.getRangeAt(0)
+    const rects = range.getClientRects()
+    if (rects.length) return rects[rects.length - 1]
+    const node = range.startContainer
+    const el = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement) as HTMLElement | null
+    const r = el?.getBoundingClientRect()
+    if (!r) return null
+    const lh = parseFloat(getComputedStyle(el!).lineHeight) || 24
+    return new DOMRect(r.left, r.top, 0, Math.min(r.height, lh))
   }
 
   // ---------- page ----------
@@ -341,26 +446,41 @@ export class DocEditor {
       this.insertEquation()
       return
     }
-    // Arrow into an adjacent equation.
+    if (!inField && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const rect = this.textCaretRect()
+      if (rect) {
+        e.preventDefault()
+        this.moveVertical(rect, e.key === 'ArrowUp' ? -1 : 1)
+      }
+      return
+    }
+    if (!inField) this.goalX = null
+    // ← → : step over invisible caret anchors and into adjacent equations.
     if (!inField && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !e.shiftKey) {
       const sel = window.getSelection()
-      if (!sel || !sel.isCollapsed) return
-      const { focusNode, focusOffset } = sel
-      if (!focusNode) return
+      if (!sel || !sel.isCollapsed || !sel.focusNode) return
       const forward = e.key === 'ArrowRight'
-      let neighbour: Node | null = null
+      let { focusNode, focusOffset } = sel
       if (focusNode.nodeType === Node.TEXT_NODE) {
         const t = focusNode.textContent ?? ''
-        const atEdge = forward ? t.slice(focusOffset).replace(/​/g, '') === '' : t.slice(0, focusOffset).replace(/​/g, '') === ''
-        if (atEdge) neighbour = forward ? focusNode.nextSibling : focusNode.previousSibling
+        while (forward ? t[focusOffset] === '\u200B' : t[focusOffset - 1] === '\u200B') focusOffset += forward ? 1 : -1
+        if (focusOffset !== sel.focusOffset) sel.collapse(focusNode, focusOffset)
+      }
+      let neighbour: Node | null = null
+      if (focusNode.nodeType === Node.TEXT_NODE) {
+        const len = focusNode.textContent?.length ?? 0
+        if (forward ? focusOffset >= len : focusOffset <= 0) neighbour = forward ? focusNode.nextSibling : focusNode.previousSibling
       } else {
         neighbour = focusNode.childNodes[forward ? focusOffset : focusOffset - 1] ?? null
       }
+      // Skip empty / anchor-only text nodes between the caret and an equation.
+      while (neighbour && neighbour.nodeType === Node.TEXT_NODE && (neighbour.textContent ?? '').replace(/\u200B/g, '') === '')
+        neighbour = forward ? neighbour.nextSibling : neighbour.previousSibling
       if (neighbour instanceof HTMLElement && neighbour.classList.contains('eq')) {
         e.preventDefault()
         const mf = neighbour.querySelector('math-field') as MathfieldElement
         mf.focus()
-        mf.position = forward ? 0 : mf.lastOffset
+        mf.position = forward ? 0 : inputEnd(mf)
       }
     }
   }
@@ -395,7 +515,7 @@ export class DocEditor {
       const inlines: Inline[] = []
       el.childNodes.forEach((n) => {
         if (n instanceof HTMLElement && n.classList.contains('eq')) inlines.push({ t: 'eq', latex: '' })
-        else inlines.push({ t: 'text', s: (n.textContent ?? '').replace(/​/g, '') })
+        else inlines.push({ t: 'text', s: (n.textContent ?? '').replace(/\u200B/g, '') })
       })
       el.classList.toggle('display', isDisplay({ type: 'p', inlines }) && el.tagName === 'P')
     }
