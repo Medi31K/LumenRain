@@ -1,0 +1,13 @@
+{
+  "name": "lumenrain-root",
+  "private": true,
+  "description": "Convenience wrapper: the app lives in ./app. Run npm commands from here or from ./app.",
+  "scripts": {
+    "postinstall": "npm --prefix app install",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "test": "npm --prefix app test",
+    "lint": "npm --prefix app run lint",
+    "tauri": "npm --prefix app run tauri --"
+  }
+}
