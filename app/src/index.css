@@ -25,6 +25,8 @@
   --lr-border-cut: #b9b2a6;
   --lr-border-focus: #e2674a;
   --lr-shadow: 20 18 15;
+  --lr-logo-letters: #3c6e91;
+  --lr-logo-drop: #e2674a;
   --lr-shadow-strength: 1;
   color-scheme: light;
 }
@@ -49,6 +51,8 @@
   --lr-border-cut: #6c7290;
   --lr-border-focus: #a9b8e0;
   --lr-shadow: 5 7 14;
+  --lr-logo-letters: #e6e1d6;
+  --lr-logo-drop: #3fd0e2;
   --lr-shadow-strength: 1.6;
   color-scheme: dark;
 }
@@ -198,11 +202,32 @@ body {
   padding: 12px 20px;
   flex-wrap: wrap;
 }
+/* Wordmark: two transparent masks (letters + raindrop) coloured by the theme. */
 .brand {
-  font-family: var(--font-head);
-  font-weight: 600;
-  font-size: 20px;
+  position: relative;
+  display: inline-block;
+  height: 30px;
+  aspect-ratio: 884 / 199;
   margin-right: 12px;
+  filter: drop-shadow(0 1.5px 1px rgb(var(--lr-shadow) / calc(0.25 * var(--lr-shadow-strength))));
+}
+.brand-letters,
+.brand-drop {
+  position: absolute;
+  inset: 0;
+  mask: center / contain no-repeat;
+  -webkit-mask: center / contain no-repeat;
+  transition: background-color 0.4s;
+}
+.brand-letters {
+  background: var(--lr-logo-letters);
+  mask-image: url('/brand/wordmark-letters.png');
+  -webkit-mask-image: url('/brand/wordmark-letters.png');
+}
+.brand-drop {
+  background: var(--lr-logo-drop);
+  mask-image: url('/brand/wordmark-drop.png');
+  -webkit-mask-image: url('/brand/wordmark-drop.png');
 }
 .grow {
   flex: 1;

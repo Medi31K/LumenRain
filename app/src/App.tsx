@@ -393,7 +393,10 @@ export default function App() {
       <Background />
 
       <header className="toolbar" onMouseDown={keepFocus}>
-        <span className="brand">Lumenrain</span>
+        <span className="brand" role="img" aria-label="Lumenrain">
+          <span className="brand-letters" />
+          <span className="brand-drop" />
+        </span>
         <button className="btn primary" onClick={() => editorRef.current?.insertEquation('', true)} title={hk('equation')}>
           {t.newEquation}
         </button>
