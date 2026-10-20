@@ -5,6 +5,9 @@ import { MathfieldElement } from 'mathlive'
 import { inputOf, RESULT_CLASS, runDocument, type EngineOptions, type Outcome, type Variable } from './engine'
 import { isDisplay, type Block, type Inline } from './markdown'
 import { TYPED_SHORTCUTS } from './operators'
+import { GraphController, type GraphElement } from './graphBlock'
+import type { ComputeEngine } from '@cortex-js/compute-engine'
+import type { GraphData } from './graph'
 
 MathfieldElement.soundsDirectory = null
 MathfieldElement.fontsDirectory = null
@@ -144,6 +147,7 @@ const SHADOW_STYLE = `
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
 
 function blockType(el: HTMLElement): Block['type'] {
+  if (el.classList.contains('graph-block')) return 'graph'
   const tag = el.tagName.toLowerCase()
   if (tag === 'hr') return 'hr'
   if (el.classList.contains('li')) return 'li'
@@ -196,7 +200,11 @@ export class DocEditor {
     root.addEventListener('keydown', this.onUndoKey, true)
     root.addEventListener('beforeinput', this.onBeforeInput)
     document.addEventListener('selectionchange', this.markSelected)
-    this.observer = new MutationObserver(() => this.scheduleSnapshot())
+    this.observer = new MutationObserver((records) => {
+      // Graph redraws (pan/zoom/theme) aren't edits.
+      if (records.every((r) => (r.target as Element).closest?.('.graph-canvas, .graph-readout'))) return
+      this.scheduleSnapshot()
+    })
     this.observer.observe(root, { subtree: true, childList: true, characterData: true })
   }
 
@@ -348,6 +356,7 @@ export class DocEditor {
   private loadBlocks(blocks: Block[]) {
     this.root.replaceChildren(
       ...blocks.map((b) => {
+        if (b.type === 'graph') return this.makeGraph(b.graph ?? { exprs: [], view: null })
         const el = this.makeBlock(b.type)
         if (b.tight !== undefined) el.dataset.tight = b.tight ? '1' : '0'
         if (b.type === 'hr') return el
@@ -368,6 +377,11 @@ export class DocEditor {
       const tight = node.dataset.tight === undefined ? undefined : node.dataset.tight === '1'
       if (type === 'hr') {
         blocks.push({ type, inlines: [], tight })
+        continue
+      }
+      if (type === 'graph') {
+        const { exprs, view } = (node as GraphElement).graph.toData()
+        blocks.push({ type, inlines: [], graph: { exprs, view } })
         continue
       }
       const inlines: Inline[] = []
@@ -422,6 +436,62 @@ export class DocEditor {
     sel.addRange(r)
     return el
   }
+
+  /** Like save(), but graphs carry a rendered SVG for the Markdown export. */
+  exportBlocks(): Block[] {
+    const blocks = this.save()
+    const graphs = Array.from(this.root.querySelectorAll('.graph-block')) as GraphElement[]
+    let g = 0
+    return blocks.map((b) => (b.type === 'graph' ? { ...b, graph: graphs[g++].graph.toData() } : b))
+  }
+
+  private engine: ComputeEngine | null = null
+
+  private makeGraph(data: GraphData): HTMLElement {
+    const g = new GraphController(
+      { exprs: data.exprs, view: data.view },
+      {
+        engine: () => this.engine,
+        changed: () => this.hooks.onChange(),
+        remove: (el) => {
+          this.checkpoint()
+          el.remove()
+          if (!this.root.firstElementChild) this.root.append(this.emptyParagraph())
+          this.hooks.onChange()
+        },
+      },
+    )
+    return g.el
+  }
+
+  /** Redraws all graphs (after recalculation or a theme change). */
+  refreshGraphs() {
+    for (const el of Array.from(this.root.querySelectorAll('.graph-block')) as GraphElement[]) el.graph.render()
+  }
+
+  /** Inserts a graph below the current line, pre-filled from the current equation or the note's functions. */
+  insertGraph() {
+    this.checkpoint()
+    let exprs: string[] = []
+    const mf = this.lastField && this.root.contains(this.lastField) ? this.lastField : null
+    const input = mf ? inputOf(mf.value) : ''
+    const def = input.match(/^([a-zA-Z])\\left\(x\\right\)=|^([a-zA-Z])\(x\)=/)
+    if (def) exprs = [`${def[1] ?? def[2]}(x)`]
+    else if (/(^|[^a-zA-Z\\])x([^a-zA-Z]|$)/.test(input) && !input.includes('=')) exprs = [input]
+    else if (this.functionNames.length) exprs = this.functionNames.map((n) => `${n}(x)`)
+    else exprs = ['x^2']
+    const sel = window.getSelection()
+    const anchor = mf ?? (sel?.focusNode && this.root.contains(sel.focusNode) ? sel.focusNode : null)
+    const block = anchor ? this.blockOf(anchor) : (this.root.lastElementChild as HTMLElement | null)
+    const el = this.makeGraph({ exprs, view: null })
+    if (block) block.after(el)
+    else this.root.append(el)
+    if (!el.nextElementSibling) el.after(this.emptyParagraph())
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    this.hooks.onChange()
+  }
+
+  private functionNames: string[] = []
 
   private emptyParagraph() {
     const p = document.createElement('p')
@@ -573,7 +643,9 @@ export class DocEditor {
   recompute(notify = true) {
     const fields = Array.from(this.root.querySelectorAll('math-field')) as MathfieldElement[]
     const inputs = fields.map((mf) => inputOf(mf.value))
-    const { outcomes, variables } = runDocument(inputs, this.opts)
+    const { outcomes, variables, functions, engine } = runDocument(inputs, this.opts)
+    this.engine = engine
+    this.functionNames = functions.filter((f) => f.params.length === 1).map((f) => f.name)
     this.fieldCount = fields.length
     fields.forEach((mf, i) => {
       // Only fields that have been calculated once (or came with a result) show answers.
@@ -594,6 +666,7 @@ export class DocEditor {
       mf.title = o.kind === 'error' ? this.hooks.errorText(o) : ''
     })
     this.hooks.onVariables(variables)
+    this.refreshGraphs()
     if (notify) this.hooks.onChange()
   }
 

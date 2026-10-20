@@ -83,13 +83,15 @@ function loadSettings(): Settings {
 }
 
 import { OPERATOR_GROUPS } from './operators'
+import { CommandPalette, type PaletteItem } from './CommandPalette'
+import { COMMANDS } from './hotkeys'
 
 function Tex({ latex }: { latex: string }) {
   const html = useMemo(() => convertLatexToMarkup(latex.replace(/#\?/g, '\\placeholder{}')), [latex])
   return <span className="math" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
-type Panel = null | 'shortcuts' | 'settings' | 'symbols' | 'export' | 'templates' | 'hotkeys'
+type Panel = null | 'palette' | 'shortcuts' | 'settings' | 'symbols' | 'export' | 'templates' | 'hotkeys'
 
 export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
@@ -138,6 +140,10 @@ export default function App() {
   }, [theme, settings])
 
   useEffect(() => {
+    editorRef.current?.refreshGraphs() // graph colours follow the theme
+  }, [theme])
+
+  useEffect(() => {
     if (activeId) writeJson(NOTES_KEY, { tabs, active: activeId } satisfies NotesIndex)
   }, [tabs, activeId])
 
@@ -157,10 +163,7 @@ export default function App() {
     if (calculate) ed.calculateAll()
   }
   const currentDoc = (): Doc => ({ props: propsRef.current, blocks: editorRef.current?.save() ?? [] })
-  const noteMarkdown = () => {
-    const d = currentDoc()
-    return toMarkdown(d.blocks, d.props)
-  }
+  const noteMarkdown = () => toMarkdown(editorRef.current?.exportBlocks() ?? [], propsRef.current)
   const openNote = (id: string) => {
     persist()
     activeRef.current = id
@@ -350,6 +353,10 @@ export default function App() {
         return newNote(settings.defaultTemplate)
       case 'copyMarkdown':
         return navigator.clipboard.writeText(noteMarkdown())
+      case 'insertGraph':
+        return !inSource && ed?.insertGraph()
+      case 'commandPalette':
+        return setPanel('palette')
     }
   }
   const runRef = useRef(run)
@@ -419,6 +426,8 @@ export default function App() {
                     [hk('heading1')?.replace('1', '1–6'), t.sc.headings],
                     ['- / 1. / ---', t.sc.lists],
                     [hk('toggleSource'), t.sc.source],
+                    [hk('insertGraph'), t.sc.graph],
+                    [hk('commandPalette'), t.sc.palette],
                   ].map(([k, d]) => (
                     <tr key={d}>
                       <td>
@@ -581,6 +590,39 @@ export default function App() {
           onTemplatesChange={(templates) => update({ templates })}
           onDefaultChange={(defaultTemplate) => update({ defaultTemplate })}
           onClose={() => setPanel(null)}
+        />
+      )}
+
+      {panel === 'palette' && (
+        <CommandPalette
+          placeholder={t.palette.placeholder}
+          empty={t.palette.empty}
+          onClose={() => setPanel(null)}
+          items={[
+            ...COMMANDS.filter((c) => c !== 'commandPalette').map(
+              (c): PaletteItem => ({ id: `cmd-${c}`, group: t.palette.commands, label: t.commands[c], hint: hk(c) || undefined, run: () => run(c) }),
+            ),
+            { id: 'theme', group: t.palette.commands, label: t.palette.toggleTheme, run: () => update({ theme: theme === 'day' ? 'night' : 'day' }) },
+            { id: 'lang', group: t.palette.commands, label: t.palette.switchLang, run: () => update({ lang: settings.lang === 'en' ? 'da' : 'en' }) },
+            { id: 'export', group: t.palette.commands, label: t.palette.exportObsidian, run: openExport },
+            { id: 'hotkeys', group: t.palette.commands, label: t.palette.openHotkeys, run: () => setPanel('hotkeys') },
+            { id: 'templates', group: t.palette.commands, label: t.palette.openTemplates, run: () => setPanel('templates') },
+            ...tabs
+              .filter((x) => x.id !== activeId)
+              .map((x): PaletteItem => ({ id: `note-${x.id}`, group: t.palette.notes, label: `${t.palette.openNote}: ${x.title || t.untitled}`, keywords: x.title, run: () => openNote(x.id) })),
+            ...OPERATOR_GROUPS.flatMap((g) =>
+              g.items.map(
+                (o): PaletteItem => ({
+                  id: `sym-${g.id}-${o.latex}`,
+                  group: t.groups[g.id],
+                  label: `${t.palette.insertSymbol} ${o.typed ?? ''}`.trim(),
+                  keywords: `${o.typed ?? ''} ${o.latex.replace(/[\\{}#?@^_]/g, ' ')}`,
+                  icon: <Tex latex={(o.preview ?? o.latex).replace(/#@/g, 'x')} />,
+                  run: () => insert(o.latex),
+                }),
+              ),
+            ),
+          ]}
         />
       )}
 

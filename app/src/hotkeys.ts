@@ -16,6 +16,8 @@ export type Command =
   | 'toggleSource'
   | 'newNote'
   | 'copyMarkdown'
+  | 'insertGraph'
+  | 'commandPalette'
 
 export interface Hotkey {
   modifiers: string[]
@@ -39,6 +41,8 @@ export const COMMANDS: Command[] = [
   'toggleSource',
   'newNote',
   'copyMarkdown',
+  'insertGraph',
+  'commandPalette',
 ]
 
 const k = (key: string, ...modifiers: string[]): Hotkey[] => [{ modifiers, key }]
@@ -59,6 +63,8 @@ export const DEFAULT_HOTKEYS: Hotkeys = {
   toggleSource: k('E', 'Mod'),
   newNote: [],
   copyMarkdown: k('C', 'Mod', 'Shift'),
+  insertGraph: k('G', 'Alt'),
+  commandPalette: k('P', 'Mod'),
 }
 
 /** Obsidian command ids → Lumenrain commands (writing commands only). */

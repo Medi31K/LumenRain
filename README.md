@@ -55,6 +55,19 @@ Type a shortcut inside an equation:
 
 There is also a palette with tabs (Calculus · Vectors & QM · Algebra · Relations · Greek) and a **Shortcuts** table in the toolbar.
 
+### 📈 New in 0.2.0
+- **Functions:** `f(x) = x² − 4`, then use `f(3)`, `f'(x)`, `∫₀¹ f(x) dx`, `h(x, y)` … anywhere below.
+- **Graphs (Alt+G):** an interactive plot in the note, in the paper style.
+  - It's filled from the current function, and you can add more curves.
+  - Zeros, extrema and intersections are marked, and hovering shows the values.
+  - Drag to move, scroll to zoom, double-click to fit.
+  - It exports to Obsidian as an image.
+- **Vectors & matrices:**
+  - `v⃗ × w⃗` (cross), `v⃗ · w⃗` (dot), `‖v‖`, `a + 2b`
+  - `A⁻¹`, `Aᵀ`, `det A`
+  - Vector and matrix variables, shown as proper matrices
+- **Command palette (Ctrl+P):** search every command, symbol and note.
+
 ### 🗂 Obsidian, without linking your vault
 - **Export** a note as Markdown: inline equations become `$…$`, equations on their own line become `$$…$$`. Copy it or *Save as…* `.md`.
 - **Import** Markdown back, including frontmatter, `---` lines and lists.
@@ -101,7 +114,9 @@ On Windows the desktop build needs [Rust](https://rustup.rs) and [Microsoft C++ 
 
 | Path | What |
 |---|---|
-| `app/src/engine.ts` | Calculation: evaluate, solve, variables, calculus (Cortex Compute Engine) |
+| `app/src/engine.ts` | Calculation: evaluate, solve, variables, functions, vectors, calculus (Cortex Compute Engine) |
+| `app/src/graph.ts`, `graphBlock.ts` | Graph analysis/rendering and the interactive graph block |
+| `app/src/CommandPalette.tsx` | Ctrl+P palette |
 | `app/src/editor.ts` | Word-style editor: equation fields, build-up rules, cursor, deletion, undo |
 | `app/src/operators.ts` | Engineering-physics shortcuts and the symbol palette |
 | `app/src/markdown.ts`, `templates.ts` | Obsidian Markdown, frontmatter and templates |

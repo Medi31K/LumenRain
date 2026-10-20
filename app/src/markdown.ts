@@ -1,9 +1,12 @@
 import { unwrapResult } from './engine'
+import type { GraphData } from './graph'
 
 export type Inline = { t: 'text'; s: string } | { t: 'eq'; latex: string }
 export interface Block {
-  type: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'li' | 'oli' | 'hr'
+  type: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'li' | 'oli' | 'hr' | 'graph'
   inlines: Inline[]
+  /** For type 'graph': the curves and window (+ a rendered SVG when exporting). */
+  graph?: GraphData & { svg?: string }
   /** No blank line before this block in the Markdown (keeps templates byte-exact). */
   tight?: boolean
 }
@@ -84,8 +87,22 @@ function inlineMarkdown(b: Block): string {
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
 const isList = (t: Block['type']) => t === 'li' || t === 'oli'
 
+const GRAPH_TAG = 'lumenrain:graph'
+
+function toBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s)
+  let bin = ''
+  bytes.forEach((b) => (bin += String.fromCharCode(b)))
+  return btoa(bin)
+}
+
 function blockMarkdown(b: Block, number: number): string {
   if (b.type === 'hr') return '---'
+  if (b.type === 'graph' && b.graph) {
+    // The definition rides along invisibly so the graph can be read back in.
+    const meta = `<!-- ${GRAPH_TAG} ${JSON.stringify({ exprs: b.graph.exprs, view: b.graph.view })} -->`
+    return b.graph.svg ? `${meta}\n![Graph](data:image/svg+xml;base64,${toBase64(b.graph.svg)})` : meta
+  }
   if (isDisplay(b)) {
     const eq = b.inlines.find((i) => i.t === 'eq') as { latex: string }
     return `$$\n${mathOf(eq.latex)}\n$$`
@@ -184,7 +201,16 @@ export function parseDocument(md: string): Doc {
   for (let i = start; i < lines.length; i++) {
     const line = lines[i]
     const trimmed = line.trim()
-    if (trimmed.startsWith('$$')) {
+    if (trimmed.startsWith(`<!-- ${GRAPH_TAG}`)) {
+      flush()
+      try {
+        const data = JSON.parse(trimmed.slice(`<!-- ${GRAPH_TAG}`.length, trimmed.lastIndexOf('-->')).trim()) as GraphData
+        push({ type: 'graph', inlines: [], graph: { exprs: data.exprs ?? [], view: data.view ?? null } })
+        if (lines[i + 1]?.trim().startsWith('![')) i++ // the exported picture
+      } catch {
+        para.push(trimmed)
+      }
+    } else if (trimmed.startsWith('$$')) {
       flush()
       let body = trimmed.slice(2)
       if (body.endsWith('$$') && body.length >= 2) {
