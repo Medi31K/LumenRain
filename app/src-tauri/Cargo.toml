@@ -1,6 +1,6 @@
 [package]
 name = "lumenrain"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lumenrain – write maths like in Word, export to Obsidian"
 authors = ["Mehdi"]
 license-file = "../../LICENSE"

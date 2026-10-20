@@ -1,4 +1,4 @@
-import { ComputeEngine } from '@cortex-js/compute-engine'
+import { compile, ComputeEngine } from '@cortex-js/compute-engine'
 
 export type ResultMode = 'auto' | 'exact' | 'decimal'
 export type Lang = 'en' | 'da'
@@ -19,6 +19,15 @@ export interface Outcome {
 
 export interface Variable {
   name: string
+  latex: string
+}
+
+/** A user-defined function, e.g. f(x) = x^2 + 1 (for graphs and later fields). */
+export interface FunctionDef {
+  name: string
+  params: string[]
+  /** MathJSON body, with earlier variables already substituted. */
+  body: unknown
   latex: string
 }
 
@@ -80,6 +89,8 @@ function normalize(latex: string): string {
     .replace(/\{,\}/g, '.')
     .replace(/\\placeholder\{\}/g, '')
     .replace(/\\left|\\right/g, (m) => m) // keep delimiters; CE understands them
+    // × is kept apart from · so that vector × vector can mean the cross product.
+    .replace(/\\times/g, '\\otimes ')
     .trim()
 }
 
@@ -118,8 +129,81 @@ function isPlainNumber(v: Boxed): boolean {
   return typeof j === 'number' || (typeof j === 'object' && j !== null && !Array.isArray(j) && 'num' in j)
 }
 
+// ---------- vectors & matrices ----------
+
+type J = unknown
+
+/** Rows of a Matrix / nested List as MathJSON entries, or null if it isn't one. */
+function rowsOf(j: J): J[][] | null {
+  if (!Array.isArray(j)) return null
+  if (j[0] === 'Matrix') return rowsOf(j[1])
+  if (j[0] !== 'List') return null
+  const items = j.slice(1)
+  if (items.length && items.every((r) => Array.isArray(r) && r[0] === 'List')) return items.map((r) => (r as J[]).slice(1))
+  return [items]
+}
+
+/** Components of a vector (column, row or plain list), or null. */
+function vectorOf(j: J): J[] | null {
+  const rows = rowsOf(j)
+  if (!rows) return null
+  if (rows.length === 1) return rows[0]
+  if (rows.every((r) => r.length === 1)) return rows.map((r) => r[0])
+  return null
+}
+
+const column = (xs: J[]): J => ['Matrix', ['List', ...xs.map((x) => ['List', x])]]
+
+/**
+ * Rewrites vector products the engine doesn't do itself:
+ * v × w (3D) → cross product, v · w → dot product. Everything else is untouched.
+ */
+function rewriteVectors(ce: ComputeEngine, j: J): J {
+  if (!Array.isArray(j)) return j
+  const args = j.slice(1).map((a) => rewriteVectors(ce, a))
+  const head = j[0]
+  const valueOf = (a: J) => ce.box(a as never).evaluate().json
+  if (head === 'CircleTimes' && args.length === 2) {
+    const [a, b] = args.map((x) => vectorOf(valueOf(x)))
+    if (a && b && a.length === 3 && b.length === 3) {
+      const m = (x: J, y: J) => ['Multiply', x, y]
+      return column([
+        ['Subtract', m(a[1], b[2]), m(a[2], b[1])],
+        ['Subtract', m(a[2], b[0]), m(a[0], b[2])],
+        ['Subtract', m(a[0], b[1]), m(a[1], b[0])],
+      ])
+    }
+    return ['Multiply', ...args]
+  }
+  if (head === 'Multiply' && args.length === 2) {
+    const [a, b] = args.map((x) => vectorOf(valueOf(x)))
+    if (a && b && a.length === b.length && a.length > 1) return ['Add', ...a.map((x, i) => ['Multiply', x, b[i]])]
+  }
+  return [head, ...args]
+}
+
+function entryLatex(ce: ComputeEngine, x: J, opts: EngineOptions): string {
+  const b = ce.box(x as never)
+  const re = b.N().re
+  if (isPlainNumber(b) && typeof re === 'number') return formatNumber(re, opts)
+  return b.latex
+}
+
+/** pmatrix for matrices/vectors, {a, b} for plain lists (e.g. eigenvalues); null otherwise. */
+function collectionLatex(ce: ComputeEngine, v: Boxed, opts: EngineOptions): string | null {
+  const j = v.json as J
+  if (!Array.isArray(j) || (j[0] !== 'Matrix' && j[0] !== 'List')) return null
+  const rows = rowsOf(j)
+  if (!rows) return null
+  const isMatrix = j[0] === 'Matrix' || (j as J[]).slice(1).every((r) => Array.isArray(r) && r[0] === 'List')
+  if (!isMatrix) return `\\left\\{${rows[0].map((x) => entryLatex(ce, x, opts)).join(',\\ ')}\\right\\}`
+  return `\\begin{pmatrix}${rows.map((r) => r.map((x) => entryLatex(ce, x, opts)).join('&')).join('\\\\')}\\end{pmatrix}`
+}
+
 /** Formats an evaluated value as "exact", "≈ decimal" or both, per mode. */
 function formatValue(v: Boxed, opts: EngineOptions, lead = '='): string {
+  const collection = collectionLatex(v.engine as ComputeEngine, v, opts)
+  if (collection) return `${lead}${collection}`
   const approx = v.N()
   const re = approx.re
   const im = approx.im
@@ -148,25 +232,36 @@ function formatSolution(s: Boxed, opts: EngineOptions): string {
  * Evaluates every equation field in document order. Definitions such as
  * `m = 2.5` become variables that later fields can use.
  */
-export function runDocument(inputs: string[], opts: EngineOptions): { outcomes: Outcome[]; variables: Variable[] } {
+export function runDocument(
+  inputs: string[],
+  opts: EngineOptions,
+): { outcomes: Outcome[]; variables: Variable[]; functions: FunctionDef[]; engine: ComputeEngine } {
   const ce = new ComputeEngine()
   const defined = new Set<string>()
   const variables: Variable[] = []
+  const functions: FunctionDef[] = []
   const outcomes = inputs.map((raw) => {
     try {
-      return runOne(ce, normalize(raw), opts, defined, variables)
+      return runOne(ce, normalize(raw), opts, defined, variables, functions)
     } catch {
       return { kind: 'error', error: 'parse' } as Outcome
     }
   })
-  return { outcomes, variables }
+  return { outcomes, variables, functions, engine: ce }
 }
 
 function unknownsOf(e: Boxed, defined: Set<string>): string[] {
   return e.unknowns.filter((u: string) => !defined.has(u))
 }
 
-function runOne(ce: ComputeEngine, src: string, opts: EngineOptions, defined: Set<string>, variables: Variable[]): Outcome {
+function runOne(
+  ce: ComputeEngine,
+  src: string,
+  opts: EngineOptions,
+  defined: Set<string>,
+  variables: Variable[],
+  functions: FunctionDef[],
+): Outcome {
   if (!src) return { kind: 'none' }
   let e: Boxed = ce.parse(src)
   if (hasError(e)) {
@@ -186,13 +281,25 @@ function runOne(ce: ComputeEngine, src: string, opts: EngineOptions, defined: Se
   const sides = opsOf(e)
   if (e.operator === 'Equal' && sides && sides.length === 2) {
     const [lhs, rhs] = sides
+    // Function definition: f(x) = …, g(x, t) = …
+    const lj = lhs.json as J
+    if (Array.isArray(lj) && typeof lj[0] === 'string' && /^[a-zA-Z](_\w+)?$/.test(lj[0]) && lj.length > 1 && lj.slice(1).every((a) => typeof a === 'string')) {
+      const name = lj[0]
+      const params = lj.slice(1) as string[]
+      const body = ce.box(rewriteVectors(ce, rhs.json) as never).evaluate().json
+      ce.assign(name, ce.box(['Function', body, ...params] as never))
+      defined.add(name)
+      functions.push({ name, params, body, latex: ce.box(body as never).latex })
+      variables.push({ name: lhs.latex, latex: ce.box(body as never).latex })
+      return { kind: 'define' }
+    }
     const name = lhs.operator === 'Symbol' ? (lhs.json as string) : undefined
     // Definition: single symbol on the left, everything on the right known.
     if (name && unknownsOf(rhs, defined).filter((u) => u !== name).length === 0 && !unknownsOf(rhs, defined).includes(name)) {
-      const value = rhs.evaluate()
+      const value = ce.box(rewriteVectors(ce, rhs.json) as never).evaluate()
       ce.assign(name, value)
       defined.add(name)
-      const shown = isPlainNumber(rhs) ? '' : formatValue(value, opts)
+      const shown = isPlainNumber(rhs) || collectionLatex(ce, rhs, opts) === collectionLatex(ce, value, opts) && collectionLatex(ce, rhs, opts) ? '' : formatValue(value, opts)
       variables.push({ name: lhs.latex, latex: formatValue(value, opts, '').replace(/^\\approx/, '') })
       return shown ? { kind: 'define', result: shown } : { kind: 'define' }
     }
@@ -213,6 +320,7 @@ function runOne(ce: ComputeEngine, src: string, opts: EngineOptions, defined: Se
     return { kind: 'solve', result: `\\;\\Rightarrow\\; ${body}` }
   }
 
+  e = ce.box(rewriteVectors(ce, e.json) as never)
   if (unknownsOf(e, defined).length > 0) {
     // Symbolic: evaluate (runs d/dx, ∂, ∫, lim, Σ and substitutes known variables), then tidy up.
     let s = e.evaluate()
@@ -222,4 +330,31 @@ function runOne(ce: ComputeEngine, src: string, opts: EngineOptions, defined: Se
     return { kind: 'value', result: formatValue(s, opts) }
   }
   return { kind: 'value', result: formatValue(e.evaluate(), opts) }
+}
+
+/**
+ * Turns a curve ("f(x)", "x^2-2", "y=a\\sin(x)", "f") into a numeric function of x,
+ * using the variables and functions defined in the note. Null if it can't be plotted.
+ */
+export function curveFunction(ce: ComputeEngine, latex: string): ((x: number) => number) | null {
+  let src = normalize(inputOf(latex))
+  if (!src) return null
+  if (/^[a-zA-Z]$/.test(src)) src = `${src}(x)`
+  let e: Boxed = ce.parse(src)
+  if (hasError(e)) return null
+  const sides = opsOf(e)
+  if (e.operator === 'Equal' && sides?.length === 2) e = sides[1]
+  e = e.evaluate()
+  if (e.unknowns.some((u: string) => u !== 'x')) return null
+  try {
+    const c = compile(e as never) as unknown as { success?: boolean; run?: (vars: Record<string, number>) => unknown }
+    if (!c.success || !c.run) return null
+    const run = c.run
+    return (x: number) => {
+      const y = run({ x })
+      return typeof y === 'number' ? y : NaN
+    }
+  } catch {
+    return null
+  }
 }

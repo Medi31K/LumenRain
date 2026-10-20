@@ -1,8 +1,9 @@
 import type { Lang } from './engine'
 
 const en = {
+  palette: { placeholder: 'Type a command, symbol or note…', commands: 'Commands', symbols: 'Symbols', notes: 'Notes', toggleTheme: 'Switch Day / Night', switchLang: 'Switch language (EN / DA)', exportObsidian: 'Export to Obsidian', openSettings: 'Settings', openHotkeys: 'Hotkeys', openTemplates: 'Templates', insertSymbol: 'Insert', openNote: 'Open note', empty: 'Nothing found' },
   shortcutsBtn: 'Shortcuts',
-  sc: { equation: 'Equation on its own line', inline: 'Equation in the text', calc: 'Calculate', leave: 'Leave the equation', fraction: 'Fraction', power: 'Exponent / index', root: 'Square root, ) closes it', calculus: 'Derivative, ∂, integral, limit, sum', greek: 'Greek letters', commands: 'Search all commands', undo: 'Undo / redo', headings: 'Headings', lists: 'Bullet, numbered list, line', source: 'Markdown source' },
+  sc: { equation: 'Equation on its own line', inline: 'Equation in the text', calc: 'Calculate', leave: 'Leave the equation', fraction: 'Fraction', power: 'Exponent / index', root: 'Square root, ) closes it', calculus: 'Derivative, ∂, integral, limit, sum', greek: 'Greek letters', commands: 'Search all commands', undo: 'Undo / redo', headings: 'Headings', lists: 'Bullet, numbered list, line', source: 'Markdown source', graph: 'Graph of the current function', palette: 'Command palette' },
   groups: { calculus: 'Calculus', vectors: 'Vectors & QM', algebra: 'Algebra', relations: 'Relations', greek: 'Greek' },
   typeHint: 'type',
   notes: 'Notes',
@@ -36,6 +37,8 @@ const en = {
     toggleSource: 'Source mode',
     newNote: 'New note',
     copyMarkdown: 'Copy as Markdown',
+    insertGraph: 'Insert graph',
+    commandPalette: 'Command palette',
   },
   untitled: 'Untitled',
   newNote: 'New note',
@@ -86,8 +89,9 @@ const en = {
 }
 
 const da: typeof en = {
+  palette: { placeholder: 'Skriv en kommando, et symbol eller en note…', commands: 'Kommandoer', symbols: 'Symboler', notes: 'Noter', toggleTheme: 'Skift Dag / Nat', switchLang: 'Skift sprog (EN / DA)', exportObsidian: 'Eksportér til Obsidian', openSettings: 'Indstillinger', openHotkeys: 'Genveje', openTemplates: 'Skabeloner', insertSymbol: 'Indsæt', openNote: 'Åbn note', empty: 'Intet fundet' },
   shortcutsBtn: 'Genveje',
-  sc: { equation: 'Ligning på egen linje', inline: 'Ligning i teksten', calc: 'Beregn', leave: 'Forlad ligningen', fraction: 'Brøk', power: 'Potens / indeks', root: 'Kvadratrod, ) lukker', calculus: 'Afledt, ∂, integral, grænse, sum', greek: 'Græske bogstaver', commands: 'Søg i alle kommandoer', undo: 'Fortryd / gentag', headings: 'Overskrifter', lists: 'Punkt-, nummereret liste, linje', source: 'Markdown-kilde' },
+  sc: { equation: 'Ligning på egen linje', inline: 'Ligning i teksten', calc: 'Beregn', leave: 'Forlad ligningen', fraction: 'Brøk', power: 'Potens / indeks', root: 'Kvadratrod, ) lukker', calculus: 'Afledt, ∂, integral, grænse, sum', greek: 'Græske bogstaver', commands: 'Søg i alle kommandoer', undo: 'Fortryd / gentag', headings: 'Overskrifter', lists: 'Punkt-, nummereret liste, linje', source: 'Markdown-kilde', graph: 'Graf af den aktuelle funktion', palette: 'Kommandopalet' },
   groups: { calculus: 'Analyse', vectors: 'Vektorer & KM', algebra: 'Algebra', relations: 'Relationer', greek: 'Græsk' },
   typeHint: 'skriv',
   notes: 'Noter',
@@ -121,6 +125,8 @@ const da: typeof en = {
     toggleSource: 'Kildetilstand',
     newNote: 'Ny note',
     copyMarkdown: 'Kopiér som Markdown',
+    insertGraph: 'Indsæt graf',
+    commandPalette: 'Kommandopalet',
   },
   untitled: 'Uden titel',
   newNote: 'Ny note',
